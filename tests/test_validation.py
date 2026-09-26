@@ -99,9 +99,10 @@ def test_investigation_sends_all_evidence_and_parses_result():
     result = investigate_scenario(provider=provider)
 
     ctx = json.loads(provider.user_prompt.split("\n\n", 1)[1])
-    assert set(ctx) == {"pipeline_description", "source", "target", "validation_results", "execution_evidence"}
+    assert set(ctx) == {"pipeline_name", "pipeline_description", "source", "target",
+                        "validation_results", "execution_evidence"}
     assert len(ctx["validation_results"]) == 6
-    assert "logs" in ctx["execution_evidence"]
+    assert "logs" in ctx["execution_evidence"]["pipeline_run"]
 
     assert result.hypotheses[0].confidence == 1.0  # clamped
     assert result.evidence[0].source == "unspecified"

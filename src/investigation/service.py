@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from src.ai.provider import LLMProvider, get_provider
-from src.data.scenario import DATA_DIR, PIPELINE_DESCRIPTION, load_scenario
+from src.data.scenario import PIPELINE_DESCRIPTION, PIPELINE_NAME, load_scenario
 from src.investigation.models import InvestigationParseError, InvestigationResult
+from src.validation.suite import run_demo_validation_suite
 from src.validation.tools import ValidationResult, run_all_validations
 
 SYSTEM_PROMPT = """You are an AI Software Reliability Engineer investigating a failed data pipeline.
@@ -110,8 +110,10 @@ def investigate_pipeline(
 ) -> InvestigationResult:
     """Investigate from caller-supplied evidence (JSON-friendly; used by the API).
 
-    If use_demo_data is True, the bundled scenario data is also profiled, the deterministic
-    validation tools are run on it, and its pipeline run log is added as execution evidence.
+    If use_demo_data is True, the bundled scenario data is also profiled, its pipeline run log is
+    added as execution evidence, and run_demo_validation_suite() (the same suite behind
+    GET /api/demo/scenario) supplies the validation results. Suite results are authoritative:
+    caller-supplied results with the same check name are replaced, not duplicated.
     """
     context: dict[str, Any] = {
         "pipeline_name": pipeline_name,
@@ -124,7 +126,11 @@ def investigate_pipeline(
         context["source"] = _profile(source)
         context["target"] = _profile(target)
         context["execution_evidence"]["pipeline_run"] = run
-        context["validation_results"] += [v.to_dict() for v in run_all_validations(source, target)]
+        suite_results = run_demo_validation_suite()["results"]
+        suite_names = {r["name"] for r in suite_results}
+        context["validation_results"] = [
+            v for v in context["validation_results"] if v.get("name") not in suite_names
+        ] + suite_results
     return _ask_llm(context, provider)
 
 
@@ -134,7 +140,11 @@ def _ask_llm(context: dict[str, Any], provider: LLMProvider | None) -> Investiga
     return InvestigationResult.from_dict(parse_llm_json(raw), raw_response=raw)
 
 
-def investigate_scenario(data_dir: Path = DATA_DIR, provider: LLMProvider | None = None) -> InvestigationResult:
-    """Convenience entry point for the bundled demo scenario."""
-    source, target, run = load_scenario(data_dir)
-    return investigate(PIPELINE_DESCRIPTION, source, target, execution_evidence=run, provider=provider)
+def investigate_scenario(provider: LLMProvider | None = None) -> InvestigationResult:
+    """Convenience entry point for the bundled demo scenario (same path as use_demo_data=true)."""
+    source, target, _ = load_scenario()
+    return investigate_pipeline(
+        PIPELINE_NAME, PIPELINE_DESCRIPTION,
+        execution_summary={"source_records": len(source), "target_records": len(target)},
+        validation_results=[], use_demo_data=True, provider=provider,
+    )

@@ -88,6 +88,25 @@ def invalid_email_check(df: pd.DataFrame, email_col: str = "email", label: str =
     )
 
 
+def invalid_status_check(df: pd.DataFrame, allowed: tuple[str, ...], status_col: str = "status",
+                         label: str = "target") -> ValidationResult:
+    """Exact match against the allowed set (case-sensitive); null/blank status is invalid."""
+    status = df[status_col].astype("string").str.strip()
+    bad = df[~status.isin(list(allowed)).fillna(False)]
+    return ValidationResult(
+        check=f"invalid_status_check[{label}]",
+        passed=bad.empty,
+        summary=f"{len(bad)} {label} row(s) have a status outside {list(allowed)}",
+        details={
+            "invalid_count": len(bad),
+            "allowed": list(allowed),
+            "invalid_values": {str(k): int(v) for k, v in
+                               bad[status_col].astype(object).fillna("<null>").astype(str).value_counts().sort_index().items()},
+            "rows": bad.head(MAX_EXAMPLES).astype(object).where(bad.notna(), None).to_dict("records"),
+        },
+    )
+
+
 def run_all_validations(source: pd.DataFrame, target: pd.DataFrame) -> list[ValidationResult]:
     checks: list[Callable[[], ValidationResult]] = [
         lambda: record_count_comparison(source, target),

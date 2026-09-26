@@ -81,8 +81,8 @@ def test_investigate_with_demo_data_adds_real_validation_evidence(stub):
     req = {**VALID_REQUEST, "validation_results": [], "use_demo_data": True}
     assert client.post("/api/investigate", json=req).status_code == 200
     ctx = json.loads(stub.prompts[0].split("\n\n", 1)[1])
-    names = {v.get("check") for v in ctx["validation_results"]}
-    assert "duplicate_customer_id_check" in names and "missing_target_records" in names
+    names = {v.get("name") for v in ctx["validation_results"]}
+    assert "duplicate_customer_id" in names and "missing_target_customer_ids" in names
     assert "logs" in ctx["execution_evidence"]["pipeline_run"]
 
 

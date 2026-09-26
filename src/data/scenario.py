@@ -14,6 +14,8 @@ Injected failures (NOT exposed to the AI - it must discover them from evidence):
     3. A legacy source id ("CUST-1020") fails integer coercion -> null
        customer_id in target.
     4. One source email is malformed and passes through unvalidated.
+    5. Legacy CRM status values (wrong case / retired codes) pass through the
+       pipeline without being mapped to the allowed status set.
 
 Running this module regenerates the files in data/ deterministically.
 """
@@ -37,8 +39,12 @@ PIPELINE_DESCRIPTION = (
     "country->region lookup table, and loads the result into the warehouse "
     "table (target_customers.csv) in batches of 5 rows. Failed batches are "
     "retried once. Expected contract: every source customer appears exactly "
-    "once in target with a non-null customer_id and a valid email."
+    "once in target with a non-null customer_id, a valid email, and a status "
+    "in (active, inactive, churned)."
 )
+
+PIPELINE_NAME = "Customer Nightly Sync"
+VALID_STATUSES = ("active", "inactive", "churned")
 
 REGION_LOOKUP = {"US": "NA", "CA": "NA", "GB": "EMEA", "DE": "EMEA", "IN": "APAC", "AU": "APAC"}
 
@@ -65,11 +71,17 @@ _SOURCE_ROWS = [
     ("CUST-1020", "Tara Novak", "tara.novak@example.com", "DE", "2024-04-03"),
 ]
 
+# Customer status per id; unlisted ids are "active". Two legacy values are deliberately invalid.
+_STATUS = {"1005": "inactive", "1008": "churned", "1009": "Active", "1013": "inactive",
+           "1018": "pending", "1019": "churned"}
+
 COLUMNS = ["customer_id", "name", "email", "country", "signup_date"]
 
 
 def build_source() -> pd.DataFrame:
-    return pd.DataFrame(_SOURCE_ROWS, columns=COLUMNS)
+    df = pd.DataFrame(_SOURCE_ROWS, columns=COLUMNS)
+    df["status"] = df["customer_id"].map(_STATUS).fillna("active")
+    return df
 
 
 def simulate_pipeline(source: pd.DataFrame) -> tuple[pd.DataFrame, dict]:

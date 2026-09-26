@@ -20,9 +20,15 @@ class ExecutionSummary(BaseModel):
 
 
 class ValidationResultIn(BaseModel):
+    """Accepts the simple {name, status, details} form, or a full CheckResult from /api/demo/scenario."""
+
     name: str = Field(min_length=1)
     status: str = Field(min_length=1, description="e.g. PASSED, FAILED, WARNING")
     details: str = ""
+    severity: str | None = None
+    summary: str | None = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    evidence: list[str] = Field(default_factory=list)
 
 
 class InvestigateRequest(BaseModel):
@@ -75,6 +81,30 @@ class InvestigateResponse(BaseModel):
             recommended_fix=r.recommended_fix,
             regression_test=header + test.code,
         )
+
+
+class CheckResultOut(BaseModel):
+    name: str
+    status: Literal["PASSED", "FAILED"]
+    severity: Literal["HIGH", "MEDIUM", "LOW"]
+    summary: str
+    metrics: dict[str, Any]
+    evidence: list[str]
+
+
+class ValidationSummary(BaseModel):
+    total_checks: int
+    passed_checks: int
+    failed_checks: int
+
+
+class DemoScenarioResponse(BaseModel):
+    pipeline_name: str
+    pipeline_description: str
+    status: Literal["PASSED", "FAILED"]
+    execution_summary: ExecutionSummary
+    validation_summary: ValidationSummary
+    validation_results: list[CheckResultOut]
 
 
 class HealthResponse(BaseModel):
