@@ -1,7 +1,7 @@
 # AI Software Reliability Engineer
 ## Frontend ↔ Backend API Contract
 
-**Version:** 2.0  
+**Version:** 2.1 (adds multiple databases; additive, backward compatible)  
 **Status:** APPROVED FOR IMPLEMENTATION  
 **Owner:** Shared FE + BE contract  
 **Last Updated:** 2026-09-26
@@ -208,6 +208,54 @@ The exact implementation may use a seeded database file.
 The frontend must NOT hardcode the target schema.
 
 The frontend obtains target information through the API.
+
+# 5a. Databases (v2.1)
+
+The backend offers every SQLite file (`*.db`, `*.sqlite`, `*.sqlite3`) in its database folder (`TARGET_DB_DIR`,
+default `data/databases/`) as a database, plus the default database (`TARGET_DB_PATH`, default
+`data/databases/crm.db`). Every table in a database is a possible target; `target_id` is the table name.
+
+The user selects a database, then a table from that database. Requests that omit `database_id` use the default
+database, so v2.0 clients keep working.
+
+## GET /api/databases
+
+Status: `200 OK`
+
+```json
+{
+  "databases": [
+    { "database_id": "crm", "display_name": "CRM", "file_name": "crm.db", "database_type": "sqlite",
+      "table_count": 1, "is_default": true },
+    { "database_id": "sales", "display_name": "Sales", "file_name": "sales.db", "database_type": "sqlite",
+      "table_count": 2, "is_default": false }
+  ]
+}
+```
+
+- The default database is first; the others follow by file name.
+- `database_id` is the file name without its extension (a second file with the same name gets its extension
+  appended, e.g. `crm_sqlite`). The frontend must use `database_id` and never build file paths.
+- Files that are not SQLite databases are not listed.
+
+## database_id on existing endpoints
+
+| Endpoint | Change |
+|---|---|
+| `GET /api/targets` | Optional query `database_id`. Returns that database's tables. Each target also has `database_id`. |
+| `GET /api/targets/{target_id}` | Optional query `database_id`. The response also has `database_id`. |
+| `POST /api/runs` | Optional form field `database_id`. |
+| `RunSummary` (all run responses) | New field `database_id`: the database the run's target belongs to. |
+| `POST /api/runs/{run_id}/retry` | Unchanged request; the new run uses the parent run's database. |
+
+Errors:
+
+| Status | `code` | When |
+|---|---|---|
+| `404` | `database_not_found` | `database_id` does not name a listed database (`field`: `database_id`) |
+| `404` | `target_not_found` | the table does not exist in the chosen database (`field`: `target_id`) |
+
+`description` on a target is optional and omitted when the backend has none for that table.
 
 # 6. Target Selection API
 
@@ -1082,6 +1130,7 @@ All NEW live endpoints must use:
 Common error codes:
 
     target_not_found
+    database_not_found
     run_not_found
     invalid_file
     unsupported_file_type

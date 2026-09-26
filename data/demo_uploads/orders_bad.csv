@@ -1,0 +1,7 @@
+order_id,customer_email,amount,currency,status,order_date
+6001,dan.moore@example.com,49.90,USD,PLACED,2024-04-01
+6002,,15.00,EUR,PLACED,2024-04-02
+6003,farah.khan@example.com,twelve,INR,SHIPPED,2024-04-03
+6003,george.brown@example.com,20.00,USD,PLACED,2024-04-04
+6005,hannah.lee@example.com,99.99,GBP,PLACED,2024-04-05
+5001,ivan.petrov@example.com,10.00,EUR,RETURNED,2024-04-06

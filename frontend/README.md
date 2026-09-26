@@ -20,7 +20,8 @@ The header badge shows the connection: **Backend connected**, **AI not configure
 
 ## User flow
 
-1. **Target selection**: pick a target table; its columns and constraints come from the API.
+1. **Target selection**: pick a database (every SQLite file in the backend's database folder), then a table in it;
+   the table's columns and constraints come from the API.
 2. **Upload**: one CSV (up to 10 MB). The browser only checks the `.csv` name and size; the backend validates.
 3. **Run result**:
    - `FAILED_VALIDATION`: summary counts and every check with its evidence, then **Investigate with AI** (summary,
@@ -53,9 +54,10 @@ src/
 | Method | Path | Used for |
 |---|---|---|
 | `GET` | `/health` | Header connection badge |
-| `GET` | `/api/targets` | Target dropdown |
-| `GET` | `/api/targets/{target_id}` | Schema and constraints |
-| `POST` | `/api/runs` | Upload one CSV (`target_id`, `file`) and get the validated run |
+| `GET` | `/api/databases` | Database dropdown |
+| `GET` | `/api/targets?database_id=` | Table dropdown for the chosen database |
+| `GET` | `/api/targets/{target_id}?database_id=` | Schema and constraints |
+| `POST` | `/api/runs` | Upload one CSV (`target_id`, `file`, `database_id`) and get the validated run |
 | `GET` | `/api/runs/{run_id}` | Open a retry's parent run |
 | `POST` | `/api/runs/{run_id}/investigate` | AI investigation of a failed run |
 | `POST` | `/api/runs/{run_id}/retry` | Corrected CSV (`file`) as a new run with `parent_run_id` |
