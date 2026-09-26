@@ -3,7 +3,7 @@ import { AppShell } from '@mantine/core';
 import AppHeader from './components/AppHeader';
 import TargetSelectionPage from './pages/TargetSelectionPage';
 import UploadPage from './pages/UploadPage';
-import RunCreatedPage from './pages/RunCreatedPage';
+import RunResultPage from './pages/RunResultPage';
 import InvestigationPage from './pages/InvestigationPage';
 
 /**
@@ -31,7 +31,7 @@ export default function App() {
           <UploadPage target={view.target} onBack={() => go('targets')} onCreated={(run) => go('run', { run })} />
         )}
         {view.name === 'run' && (
-          <RunCreatedPage
+          <RunResultPage
             run={view.run}
             target={view.target}
             onUploadAnother={() => go('upload', { run: null })}

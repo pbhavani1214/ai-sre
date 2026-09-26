@@ -101,6 +101,20 @@
  *
  * @typedef {'CREATED'|'VALIDATING'|'FAILED_VALIDATION'|'LOADING'|'SUCCEEDED'|'LOAD_FAILED'} RunStatus
  *
+ * @typedef {Object} RunCounts  RunSummary.summary
+ * @property {number} rows_received
+ * @property {number} checks_total
+ * @property {number} checks_passed
+ * @property {number} checks_failed
+ *
+ * @typedef {Object} RunValidationResult  one entry of RunSummary.validation_results (CONTRACT.md §9)
+ * @property {string} name               e.g. "primary_key_uniqueness"; any name the backend defines
+ * @property {'PASSED'|'FAILED'|'WARNING'|'SKIPPED'} status
+ * @property {'INFO'|'WARNING'|'ERROR'} severity
+ * @property {string} summary            human-readable message
+ * @property {Object<string, any>} metrics
+ * @property {string[]} evidence         deterministic lines from the backend, shown verbatim
+ *
  * @typedef {Object} RunSummary  POST /api/runs (201), GET /api/runs/{run_id}
  * @property {string} run_id
  * @property {string|null} parent_run_id
@@ -110,8 +124,8 @@
  * @property {RunStatus} status
  * @property {string} created_at
  * @property {string|null} completed_at
- * @property {{rows_received: number, checks_total: number, checks_passed: number, checks_failed: number}} summary
- * @property {Object[]} validation_results   rendered in a later milestone
+ * @property {RunCounts} summary
+ * @property {RunValidationResult[]} validation_results
  * @property {{rows_loaded: number, target_table: string} | null} load_result
  *
  * @typedef {Object} Health  GET /health
