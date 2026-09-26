@@ -11,9 +11,12 @@ npm run dev        # http://localhost:5173
 npm run build      # production build in dist/
 ```
 
-With no configuration the UI runs on **bundled demo data**, so no backend is needed. The header shows a
-"Demo data" badge in this mode. To use a real backend, copy `.env.example` to `.env` and set
-`VITE_API_BASE_URL` (for example `http://localhost:8000`).
+To talk to the FastAPI backend, copy `.env.example` to `.env` (it points at `http://localhost:8000`) and start
+the backend first (see the root README). The header badge shows the connection: **Backend connected**,
+**AI not configured** (backend up, no `LLM_API_KEY`), or **Backend offline**.
+
+With `VITE_API_BASE_URL` empty the UI runs on **bundled sample data** with no backend, and the header shows a
+"Demo data" badge.
 
 ## User flow
 
@@ -45,19 +48,27 @@ src/
 └── data/                            demo data (see below)
 ```
 
-## Backend contract (proposed)
+## Backend contract
 
-The UI expects two endpoints. Payloads mirror the existing Python models, so the backend can return
-`ValidationResult.to_dict()` and `InvestigationResult.to_dict()` directly.
+`src/services/api.js` is the only module that calls the backend. Shapes are documented in `src/types/index.js`
+and defined by the Pydantic models in `src/api/schemas.py`.
 
-| Method | Path | Response |
+| Method | Path | Used for |
 |---|---|---|
-| `GET` | `/api/scenario` | `{ pipeline_description, source: [...rows], target: [...rows], pipeline_run, validation_results: [ValidationResult] }` |
-| `POST` | `/api/investigations` | `InvestigationResult` (`summary`, `hypotheses`, `evidence`, `root_cause`, `recommended_fix`, `regression_test`) |
+| `GET` | `/health` | Header connection badge; warns before investigating if no LLM key is set |
+| `GET` | `/api/demo/scenario` | Run overview and data checks: pipeline name, execution summary, `validation_results` |
+| `GET` | `/api/demo/run` | Pipeline steps, logs and the data table: `pipeline_run`, `source`, `target` rows |
+| `POST` | `/api/investigate` | The AI investigation. Sent with `use_demo_data: true`, so the backend re-runs the same checks |
 
 ## Demo data
 
-- `src/data/scenario.json` is produced from the real backend code (`load_scenario()` and
-  `run_all_validations()`), so the counts and check results are exactly what the backend computes.
-- `src/data/investigation.mock.json` is a hand-written, illustrative AI result in the
-  `InvestigationResult` shape. It is not real model output.
+- `src/data/scenario.json` is the backend's `/api/demo/scenario` and `/api/demo/run` responses merged, so the
+  counts and check results are exactly what the backend computes. Regenerate it from the repo root after
+  backend changes:
+
+  ```bash
+  python -c "import json; from src.validation.suite import get_demo_scenario, get_demo_run; \
+  json.dump({**get_demo_scenario(), **get_demo_run()}, open('frontend/src/data/scenario.json', 'w'), indent=2)"
+  ```
+- `src/data/investigation.mock.json` is a hand-written, illustrative AI result in the `/api/investigate`
+  response shape. It is not real model output.

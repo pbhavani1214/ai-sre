@@ -1,93 +1,111 @@
 {
-  "summary": "The nightly customer sync reported SUCCESS, but the target does not honour its contract. Target has 23 rows for 20 source customers: 2 Singapore customers were dropped by the region join, 1 legacy customer lost its id during the integer cast, 5 rows were duplicated when load batch 3 was retried, and 1 malformed email passed through unvalidated. The duplicates mask the missing rows, so the row count alone looks plausible.",
+  "summary": "The nightly customer sync reported SUCCESS, but the target breaks its contract. Target has 23 rows for 20 source customers: 2 Singapore customers were dropped by the region join, 1 legacy customer lost its id during the integer cast, 5 rows were duplicated when load batch 3 was retried, and invalid emails and statuses passed through unvalidated. The duplicates mask the missing rows, so the row count alone looks plausible.",
+  "observed_facts": [
+    "[validation.record_count] Source has 20 rows and target has 23 (+3); the count difference hides 3 missing customers behind 5 duplicate rows.",
+    "[pipeline.run_log] Step transform.join_region_lookup reads 20 rows and outputs 18.",
+    "[pipeline.run_log] Load batch 3/4 timed out waiting for a commit ack and was retried; both attempts committed (rows_in=18, rows_written=23).",
+    "[validation.duplicate_customer_id] 5 customer IDs appear twice in target: 1012, 1013, 1015, 1016, 1017.",
+    "[validation.missing_target_customer_ids] 1004 and 1014 (country SG) and CUST-1020 are in source but not in target.",
+    "[validation.null_customer_id] 1 target row (Tara Novak) has a null customer_id.",
+    "[validation.invalid_email] george.brown@example is invalid in target and has the same value in source.",
+    "[validation.invalid_customer_status] 2 target rows have statuses outside (active, inactive, churned): 'Active' and 'pending', both unchanged from source."
+  ],
   "hypotheses": [
     {
-      "statement": "The INNER JOIN on the region lookup silently drops customers whose country is not in the lookup table (SG).",
-      "status": "confirmed",
-      "confidence": 0.95,
-      "supporting_evidence": [
-        "pipeline_run.steps: join_region_lookup rows_in=20, rows_out=18",
-        "pipeline_run.config: join.how = 'inner'; region_lookup_countries has no 'SG'",
-        "missing_target_records: 1004 (Daniel Tan) and 1014 (Nina Lim) are missing, both country SG"
+      "hypothesis": "The INNER JOIN on the region lookup silently drops customers whose country is not in the lookup table (SG).",
+      "status": "SUPPORTED",
+      "evidence": [
+        "[pipeline.run_log] join_region_lookup rows_in=20, rows_out=18; config join.how='inner'; region_lookup_countries has no 'SG'",
+        "[validation.missing_target_customer_ids] 1004 (Daniel Tan) and 1014 (Nina Lim) are missing, both country SG"
       ],
-      "contradicting_evidence": []
+      "reasoning": "Exactly the two SG customers disappear at the join step, and the join is configured as inner with no SG entry in the lookup."
     },
     {
-      "statement": "Load batch 3 committed, then timed out and was retried in full without idempotency, duplicating its rows.",
-      "status": "confirmed",
-      "confidence": 0.93,
-      "supporting_evidence": [
-        "pipeline_run.logs: 'batch 3/4 timeout after 30s waiting for commit ack' followed by a retry",
-        "pipeline_run.steps: load rows_in=18 but rows_written=23 (+5 = one batch)",
-        "duplicate_customer_id_check: 1012, 1013, 1015, 1016, 1017 each appear twice (exactly batch 3)"
+      "hypothesis": "Load batch 3 committed, then timed out and was retried in full without idempotency, duplicating its rows.",
+      "status": "SUPPORTED",
+      "evidence": [
+        "[pipeline.run_log] 'batch 3/4 timeout after 30s waiting for commit ack' followed by a retry",
+        "[validation.duplicate_customer_id] 1012, 1013, 1015, 1016, 1017 each appear twice (exactly batch 3)"
       ],
-      "contradicting_evidence": []
+      "reasoning": "The five duplicated IDs are exactly one batch, and the load step writes 5 more rows than it received."
     },
     {
-      "statement": "Casting customer_id to integer turned the legacy id 'CUST-1020' into null.",
-      "status": "confirmed",
-      "confidence": 0.9,
-      "supporting_evidence": [
-        "pipeline_run.steps: cast_customer_id warning '1 value(s) could not be parsed as integer and were set to null'",
-        "null_customer_id_check: 1 target row (Tara Novak) has a null customer_id",
-        "missing_target_records: CUST-1020 not found in target by id"
+      "hypothesis": "Casting customer_id to integer turned the legacy id 'CUST-1020' into null.",
+      "status": "SUPPORTED",
+      "evidence": [
+        "[pipeline.run_log] cast_customer_id warning: 1 value could not be parsed as integer and was set to null",
+        "[validation.null_customer_id] 1 target row (Tara Novak) has a null customer_id"
       ],
-      "contradicting_evidence": []
+      "reasoning": "The single coerced value matches the single null ID, and CUST-1020 is the only non-numeric source ID."
     },
     {
-      "statement": "Emails are not validated; a malformed source email is loaded as-is.",
-      "status": "confirmed",
-      "confidence": 0.85,
-      "supporting_evidence": [
-        "invalid_email_check[source]: 'george.brown@example' has no top-level domain",
-        "invalid_email_check[target]: the same value appears in target"
+      "hypothesis": "Emails and statuses are not validated or mapped; bad source values are loaded as-is.",
+      "status": "SUPPORTED",
+      "evidence": [
+        "[validation.invalid_email] the invalid email has the same value in source",
+        "[validation.invalid_customer_status] 'Active' and 'pending' are unchanged from source"
       ],
-      "contradicting_evidence": [
-        "The pipeline contract says emails must be valid, but no step claims to validate them, so this may be a missing check rather than a regression."
-      ]
+      "reasoning": "The invalid values originate in source, and no pipeline step claims to validate them, so this is a missing check rather than a transformation bug."
     },
     {
-      "statement": "The extract step read an incomplete CRM export.",
-      "status": "rejected",
-      "confidence": 0.05,
-      "supporting_evidence": [],
-      "contradicting_evidence": [
-        "pipeline_run.logs: extract read 20 rows",
-        "record_count_comparison: source has 20 rows"
-      ]
+      "hypothesis": "The extract step read an incomplete CRM export.",
+      "status": "REJECTED",
+      "evidence": [
+        "[pipeline.run_log] extract read 20 rows",
+        "[validation.record_count] source has 20 rows"
+      ],
+      "reasoning": "Extract output matches the source row count, so rows are lost later in the pipeline."
     }
   ],
-  "evidence": [
-    {
-      "source": "record_count_comparison",
-      "observation": "source=20, target=23 (+3). The count difference hides 3 missing customers behind 5 duplicate rows."
-    },
-    {
-      "source": "pipeline_run.steps",
-      "observation": "join_region_lookup drops 2 rows (20 \u2192 18); load writes 23 rows from 18 input rows."
-    },
-    {
-      "source": "pipeline_run.logs",
-      "observation": "Batch 3/4 timed out waiting for a commit ack and was retried; both attempts committed."
-    },
-    {
-      "source": "duplicate_customer_id_check",
-      "observation": "5 ids duplicated: 1012, 1013, 1015, 1016, 1017."
-    },
-    {
-      "source": "null_customer_id_check",
-      "observation": "1 row has a null customer_id (Tara Novak, originally CUST-1020)."
-    },
-    {
-      "source": "invalid_email_check[target]",
-      "observation": "george.brown@example is invalid and present in target."
-    }
-  ],
+  "root_cause_status": "IDENTIFIED",
   "root_cause": "Three independent defects combine: (1) the region enrichment uses an INNER JOIN and the lookup has no 'SG' entry, so Singapore customers are dropped; (2) the loader retries a whole batch after a commit-ack timeout without an idempotent write, duplicating batch 3; (3) customer_id is coerced to integer with errors='coerce', nulling non-numeric legacy ids. A fourth gap is missing email validation. Every step reports SUCCESS because no step checks row-level contracts.",
-  "recommended_fix": "1. Change the region join to a LEFT JOIN and add 'SG' \u2192 'APAC' to the lookup; alert on unmapped countries.\n2. Make the load idempotent: MERGE/UPSERT on customer_id (or delete-then-insert per batch inside one transaction) so retries cannot duplicate rows.\n3. Keep customer_id as a string key (or map legacy 'CUST-' ids explicitly) and fail the run if any id becomes null.\n4. Validate emails in transform and quarantine invalid rows.\n5. Add a post-load contract check (source count = target count, unique non-null ids) that fails the run instead of reporting SUCCESS.",
-  "regression_test": {
-    "name": "test_customer_sync_contract",
-    "description": "Fails today (dropped SG row, duplicated retry batch, nulled legacy id) and passes once the join, idempotent load and id handling are fixed.",
-    "code": "import pandas as pd\n\nfrom pipeline import run_customer_sync  # the fixed pipeline entry point\n\n\ndef test_every_source_customer_loaded_exactly_once(tmp_path):\n    source = pd.DataFrame({\n        \"customer_id\": [\"1001\", \"1004\", \"CUST-1020\"],\n        \"name\": [\"Alice\", \"Daniel\", \"Tara\"],\n        \"email\": [\"alice@example.com\", \"daniel@example.com\", \"tara@example.com\"],\n        \"country\": [\"US\", \"SG\", \"DE\"],\n        \"signup_date\": [\"2024-01-05\", \"2024-01-15\", \"2024-04-03\"],\n    })\n\n    # Simulate a timeout on the first batch after it has committed.\n    target = run_customer_sync(source, batch_size=2, fail_after_commit_on_batch=1)\n\n    # No customer is dropped (SG has no region -> kept with a null/unknown region).\n    assert len(target) == len(source)\n    # No duplicates from the retry.\n    assert target[\"customer_id\"].is_unique\n    # Legacy ids are not silently nulled.\n    assert target[\"customer_id\"].notna().all()\n\n\ndef test_invalid_emails_are_rejected():\n    source = pd.DataFrame({\n        \"customer_id\": [\"1007\"], \"name\": [\"George\"], \"email\": [\"george.brown@example\"],\n        \"country\": [\"US\"], \"signup_date\": [\"2024-02-07\"],\n    })\n    result = run_customer_sync(source, batch_size=5)\n    assert result.empty or result.attrs.get(\"rejected_count\") == 1\n"
-  }
+  "root_cause_evidence": [
+    "[pipeline.run_log] Step transform.join_region_lookup reads 20 rows and outputs 18.",
+    "[pipeline.run_log] Load batch 3/4 timed out waiting for a commit ack and was retried; both attempts committed (rows_in=18, rows_written=23).",
+    "[validation.null_customer_id] 1 target row (Tara Novak) has a null customer_id."
+  ],
+  "root_cause_reasoning": "Each defect is visible at a specific pipeline step (join 20→18, cast warning, load 18→23 after a retried batch) and matches the rows that the validation checks flag. No step checks row-level contracts, so every step reports SUCCESS.",
+  "evidence": [
+    "[validation.record_count] Source has 20 rows and target has 23 (+3); the count difference hides 3 missing customers behind 5 duplicate rows.",
+    "[pipeline.run_log] Step transform.join_region_lookup reads 20 rows and outputs 18.",
+    "[pipeline.run_log] Load batch 3/4 timed out waiting for a commit ack and was retried; both attempts committed (rows_in=18, rows_written=23).",
+    "[validation.duplicate_customer_id] 5 customer IDs appear twice in target: 1012, 1013, 1015, 1016, 1017.",
+    "[validation.missing_target_customer_ids] 1004 and 1014 (country SG) and CUST-1020 are in source but not in target.",
+    "[validation.null_customer_id] 1 target row (Tara Novak) has a null customer_id.",
+    "[validation.invalid_email] george.brown@example is invalid in target and has the same value in source.",
+    "[validation.invalid_customer_status] 2 target rows have statuses outside (active, inactive, churned): 'Active' and 'pending', both unchanged from source."
+  ],
+  "recommended_fix": "1. Change the region join to a LEFT JOIN and add 'SG' → 'APAC' to the lookup; alert on unmapped countries.\n2. Make the load idempotent: MERGE/UPSERT on customer_id (or delete-then-insert per batch inside one transaction) so retries cannot duplicate rows.\n3. Keep customer_id as a string key (or map legacy 'CUST-' ids explicitly) and fail the run if any id becomes null.\n4. Validate emails in transform and quarantine invalid rows.\n5. Add a post-load contract check (source count = target count, unique non-null ids) that fails the run instead of reporting SUCCESS.",
+  "regression_test": "# test_customer_sync_contract: Fails today (dropped SG row, duplicated retry batch, nulled legacy id) and passes once the join, idempotent load and id handling are fixed.\nimport pandas as pd\n\nfrom pipeline import run_customer_sync  # the fixed pipeline entry point\n\n\ndef test_every_source_customer_loaded_exactly_once(tmp_path):\n    source = pd.DataFrame({\n        \"customer_id\": [\"1001\", \"1004\", \"CUST-1020\"],\n        \"name\": [\"Alice\", \"Daniel\", \"Tara\"],\n        \"email\": [\"alice@example.com\", \"daniel@example.com\", \"tara@example.com\"],\n        \"country\": [\"US\", \"SG\", \"DE\"],\n        \"signup_date\": [\"2024-01-05\", \"2024-01-15\", \"2024-04-03\"],\n    })\n\n    # Simulate a timeout on the first batch after it has committed.\n    target = run_customer_sync(source, batch_size=2, fail_after_commit_on_batch=1)\n\n    # No customer is dropped (SG has no region -> kept with a null/unknown region).\n    assert len(target) == len(source)\n    # No duplicates from the retry.\n    assert target[\"customer_id\"].is_unique\n    # Legacy ids are not silently nulled.\n    assert target[\"customer_id\"].notna().all()\n\n\ndef test_invalid_emails_are_rejected():\n    source = pd.DataFrame({\n        \"customer_id\": [\"1007\"], \"name\": [\"George\"], \"email\": [\"george.brown@example\"],\n        \"country\": [\"US\"], \"signup_date\": [\"2024-02-07\"],\n    })\n    result = run_customer_sync(source, batch_size=5)\n    assert result.empty or result.attrs.get(\"rejected_count\") == 1\n",
+  "investigation_trace": [
+    {
+      "stage": "evidence_collection",
+      "description": "Collected 11 evidence items: execution summary, pipeline run log, validation results, and source/target dataset profiles."
+    },
+    {
+      "stage": "validation_analysis",
+      "description": "6 of 6 validation checks failed."
+    },
+    {
+      "stage": "hypothesis_generation",
+      "description": "Generated 5 hypotheses on the first attempt."
+    },
+    {
+      "stage": "evidence_correlation",
+      "description": "All citations reference supplied evidence IDs."
+    },
+    {
+      "stage": "root_cause_analysis",
+      "description": "Root cause IDENTIFIED from 3 cited evidence items."
+    },
+    {
+      "stage": "remediation_generation",
+      "description": "Recommended fix generated by the LLM. It has not been applied."
+    },
+    {
+      "stage": "regression_test_generation",
+      "description": "Regression test generated for review. It was not executed."
+    }
+  ],
+  "evidence_warnings": []
 }

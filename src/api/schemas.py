@@ -121,6 +121,12 @@ class DemoScenarioResponse(BaseModel):
     validation_results: list[CheckResultOut]
 
 
+class DemoRunResponse(BaseModel):
+    pipeline_run: dict[str, Any]
+    source: list[dict[str, Any]]
+    target: list[dict[str, Any]]
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     llm_configured: bool

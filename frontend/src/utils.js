@@ -20,3 +20,14 @@ export function durationBetween(a, b) {
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/;
 export const isValidEmail = (e) => typeof e === 'string' && EMAIL_RE.test(e);
 export const isBlank = (v) => v === null || v === undefined || String(v).trim() === '';
+
+/** "[validation.null_customer_id] 1 row has..." -> { id: 'validation.null_customer_id', text: '1 row has...' } */
+export function parseCited(line) {
+  const m = String(line).match(/^\s*\[([^\]]+)\]\s*(.*)$/s);
+  return m ? { id: m[1], text: m[2] } : { id: null, text: String(line) };
+}
+
+export const isFailed = (check) => check.status !== 'PASSED';
+
+/** validation_results as a name -> CheckResult map */
+export const byName = (checks) => Object.fromEntries(checks.map((c) => [c.name, c]));

@@ -1,6 +1,6 @@
 import { Alert, Badge, Button, Card, Group, SimpleGrid, Spoiler, Stack, Text, Title } from '@mantine/core';
 import { IconAlertTriangle, IconCircleCheck, IconSparkles } from '@tabler/icons-react';
-import { durationBetween, formatDateTime } from '../utils';
+import { byName, durationBetween, formatDateTime, isFailed } from '../utils';
 
 function Stat({ label, value, hint, color }) {
   return (
@@ -12,12 +12,14 @@ function Stat({ label, value, hint, color }) {
   );
 }
 
-export default function RunOverview({ run, description, validations, investigationStatus, onInvestigate }) {
-  const failed = validations.filter((v) => !v.passed);
-  const byCheck = Object.fromEntries(validations.map((v) => [v.check, v]));
-  const counts = byCheck.record_count_comparison?.details ?? {};
-  const missing = byCheck.missing_target_records?.details.missing_count ?? 0;
-  const extra = byCheck.duplicate_customer_id_check?.details.extra_rows ?? 0;
+export default function RunOverview({ scenario, investigationStatus, onInvestigate }) {
+  const { pipeline_name: name, pipeline_description: description, execution_summary: run } = scenario;
+  const validations = scenario.validation_results;
+  const failed = validations.filter(isFailed);
+  const checks = byName(validations);
+  const counts = checks.record_count?.metrics ?? {};
+  const missing = checks.missing_target_customer_ids?.metrics.affected_records ?? 0;
+  const extra = checks.duplicate_customer_id?.metrics.extra_rows ?? 0;
   const running = investigationStatus === 'running';
 
   return (
@@ -26,9 +28,9 @@ export default function RunOverview({ run, description, validations, investigati
         <Group justify="space-between" align="flex-start" gap="md">
           <div>
             <Group gap="xs" mb={4}>
-              <Title order={2} fz={{ base: 20, sm: 24 }}>{run.pipeline}</Title>
+              <Title order={2} fz={{ base: 20, sm: 24 }}>{name}</Title>
               <Badge color="green" variant="light" leftSection={<IconCircleCheck size={12} />}>
-                Reported {run.status}
+                Reported {run.reported_run_status}
               </Badge>
             </Group>
             <Text size="sm" c="dimmed">
@@ -53,7 +55,7 @@ export default function RunOverview({ run, description, validations, investigati
         </Spoiler>
 
         {failed.length > 0 ? (
-          <Alert color="red" variant="light" icon={<IconAlertTriangle />} title="The run says SUCCESS, but the data disagrees">
+          <Alert color="red" variant="light" icon={<IconAlertTriangle />} title={`The run says ${run.reported_run_status}, but the data disagrees`}>
             {failed.length} of {validations.length} data checks failed. Review the evidence below or let the AI
             investigate the root cause.
           </Alert>
@@ -62,10 +64,10 @@ export default function RunOverview({ run, description, validations, investigati
         )}
 
         <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
-          <Stat label="Source rows" value={counts.source_count ?? '–'} hint="Rows extracted" />
+          <Stat label="Source rows" value={counts.source_records ?? '–'} hint="Rows extracted" />
           <Stat
             label="Target rows"
-            value={counts.target_count ?? '–'}
+            value={counts.target_records ?? '–'}
             hint={counts.difference ? `${counts.difference > 0 ? '+' : ''}${counts.difference} vs source` : 'Matches source'}
             color={counts.difference ? 'orange' : undefined}
           />

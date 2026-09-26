@@ -1,11 +1,19 @@
 import { ActionIcon, Badge, Container, Group, Text, ThemeIcon, Tooltip, useComputedColorScheme, useMantineColorScheme } from '@mantine/core';
 import { IconActivityHeartbeat, IconMoon, IconSun } from '@tabler/icons-react';
-import { USE_MOCK } from '../services/api';
+import { useHealth } from '../hooks/useHealth';
+
+const HEALTH_BADGE = {
+  mock: { color: 'gray', label: 'Demo data', tip: 'No backend configured (VITE_API_BASE_URL). Showing bundled sample data.' },
+  ready: { color: 'green', label: 'Backend connected', tip: 'Backend reachable and the AI provider is configured.' },
+  'no-llm': { color: 'yellow', label: 'AI not configured', tip: 'Backend reachable, but it has no LLM API key. Set LLM_API_KEY in the backend .env.' },
+  offline: { color: 'red', label: 'Backend offline', tip: 'Could not reach the backend.' },
+};
 
 export default function AppHeader() {
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme('light');
   const dark = scheme === 'dark';
+  const badge = HEALTH_BADGE[useHealth().status];
 
   return (
     <Container size="lg" h="100%">
@@ -20,9 +28,9 @@ export default function AppHeader() {
           </div>
         </Group>
         <Group gap="xs" wrap="nowrap">
-          {USE_MOCK && (
-            <Tooltip label="No backend configured. Showing bundled sample data.">
-              <Badge variant="light" color="gray" visibleFrom="xs">Demo data</Badge>
+          {badge && (
+            <Tooltip label={badge.tip} multiline w={260}>
+              <Badge variant="light" color={badge.color} visibleFrom="xs">{badge.label}</Badge>
             </Tooltip>
           )}
           <Tooltip label={dark ? 'Light mode' : 'Dark mode'}>
