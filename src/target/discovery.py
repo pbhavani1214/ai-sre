@@ -120,4 +120,6 @@ def discover_schema(conn: sqlite3.Connection, table: str) -> dict[str, Any]:
                                 "description": f"{column} must contain an allowed value"})
         else:
             constraints.append({"type": "CHECK", "columns": [], "description": f"CHECK ({expression})"})
-    return {"columns": columns, "constraints": constraints}
+    # Internal (not part of the API response): columns SQLite fills in when an insert omits them.
+    columns_with_default = [r[1] for r in info if r[4] is not None]
+    return {"columns": columns, "constraints": constraints, "columns_with_default": columns_with_default}

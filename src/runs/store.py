@@ -35,6 +35,14 @@ class RunRecord:
     completed_at: str | None = None
     validation_results: list[dict[str, Any]] = field(default_factory=list)
     load_result: dict[str, Any] | None = None
+    status_history: list[str] = field(default_factory=list)  # internal: every status the run has had
+
+    def __post_init__(self):
+        self.status_history.append(self.status)
+
+    def set_status(self, status: str) -> None:
+        self.status = status
+        self.status_history.append(status)
 
     def to_summary(self) -> dict[str, Any]:
         """The contract's RunSummary."""
