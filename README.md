@@ -42,10 +42,8 @@ missing, but 5 duplicate rows hide the gap.
 | `src/investigation/models.py` | Structured result: summary, hypotheses, evidence, root cause, fix, regression test |
 | `src/investigation/service.py` | Builds the evidence, sends it to the LLM, parses structured JSON output |
 | `tests/test_validation.py` | Proves the validation tools work, plus the investigation wiring (stub LLM) |
-| `src/target/` | The SQLite target database: demo `customers` table (`python -m src.target.demo`) and reading any table's DDL, columns, keys and CHECK constraints back from SQLite |
-| `src/runs/` | Upload runs: read the CSV (`ingest.py`), run parse → schema_check → validate → load against the target table (`pipeline.py`), keep runs in memory (`store.py`), build the AI evidence for a failed run (`investigate.py`) |
-| `data/demo_uploads/` | `customers_upload_bad.csv` (fails 6 checks) and `customers_upload_fixed.csv` (its corrected version, loads 10 rows) |
-| `src/api/` | FastAPI app: `/health`, the demo endpoints, `/api/investigate`, and the upload-run endpoints below |
+| `src/target/` | SQLite target database (`database.py`, seeded `customer` table; `python -m src.target.database [--reset]`), target registry (`registry.py`) and schema discovery from SQLite (`discovery.py`) |
+| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate`, `/api/targets`, `/api/targets/{target_id}` |
 | `frontend/` | React + Vite + Mantine UI (see `frontend/README.md`) |
 | `example_usage.py` | How another module calls the investigation service |
 
@@ -83,48 +81,6 @@ npm run dev
 Open http://localhost:5173. The header badge should read **Backend connected**. Without `LLM_API_KEY` it reads
 **AI not configured**: the evidence still loads, but "Investigate with AI" returns an error. The backend only
 accepts browser calls from the origins in `CORS_ORIGINS` (the Vite dev server by default).
-
-## Upload runs: one file → existing SQLite table → validate → load or fail → AI
-
-The user uploads one CSV file for an existing table in the target SQLite database
-(`TARGET_DB_PATH`, default `data/target.db`, created with the demo `customers` table if missing).
-
-1. **parse**: UTF-8 CSV, every value read as text, empty cells are null. An unreadable file
-   (over 10 MB, over 50,000 rows, not UTF-8, bad header, ragged rows) is rejected with an error and creates no run.
-2. **schema_check**: file columns against the table's columns (missing required columns, unknown columns).
-3. **validate**: every rule comes from the table definition read back from SQLite: NOT NULL, column
-   types, PRIMARY KEY and UNIQUE keys (duplicates in the file and conflicts with rows already in the table),
-   and every CHECK constraint in the DDL, which SQLite itself evaluates on a TEMP copy of the upload.
-4. **load**: only if every check passed, all rows in one transaction. A database error (for example a
-   foreign key) rolls back and fails the run at `load`.
-
-A run that fails is still a run (`201`, `status: "FAILED"`) with its validation results, per-row issues
-(file line numbers), stage log and row counts. `POST /api/runs/{id}/investigate` sends exactly that
-evidence, with the table's DDL, to the same investigation service as the demo. Uploading the corrected
-file with `retry_of` links the runs and reports which checks were resolved.
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/targets` | Tables that a file can be loaded into, with row counts |
-| `GET` | `/api/targets/{table}` | DDL, columns, keys, CHECK constraints, row count, 3 sample rows |
-| `POST` | `/api/targets/reset` | Demo helper: recreate the `customers` table with its 10 seed rows |
-| `GET` | `/api/demo/uploads/{file}` | Download `customers_upload_bad.csv` or `customers_upload_fixed.csv` |
-| `POST` | `/api/runs` | Multipart: `target_table`, `file`, optional `retry_of`. Returns `201` and the run |
-| `GET` | `/api/runs` | Runs in memory (last 50), newest first |
-| `GET` | `/api/runs/{run_id}` | One run, including its saved investigation |
-| `POST` | `/api/runs/{run_id}/investigate` | AI investigation of a failed run (`409` if the run succeeded) |
-
-Errors from these endpoints use `{"detail": {"code", "message", "field"}}`; a missing form field is
-FastAPI's default `422`. Pydantic models: `src/api/schemas.py` (`RunDetail`, `TargetDetail`, …).
-
-Demo from the command line (backend running):
-
-```bash
-curl -s -X POST localhost:8000/api/targets/reset
-curl -s -F target_table=customers -F file=@data/demo_uploads/customers_upload_bad.csv localhost:8000/api/runs    # FAILED
-curl -s -X POST localhost:8000/api/runs/<run_id>/investigate                                                      # needs LLM_API_KEY
-curl -s -F target_table=customers -F retry_of=<run_id> -F file=@data/demo_uploads/customers_upload_fixed.csv localhost:8000/api/runs   # SUCCESS, 10 rows
-```
 
 ## Intended architecture (React + FastAPI)
 
