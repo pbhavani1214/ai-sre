@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import {
-  Alert, Anchor, Button, Card, Container, Group, Loader, Select, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip,
+  Alert, Button, Card, Container, Group, Loader, Select, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip,
 } from '@mantine/core';
-import { IconAlertTriangle, IconArrowRight, IconDatabase, IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowRight, IconDatabase, IconRefresh } from '@tabler/icons-react';
 import TargetSchema from '../components/TargetSchema';
-import { useTargetDetail, useTargets } from '../hooks/useTargets';
-import { databaseLabel } from '../utils';
+import { useDatabases, useTargetDetail, useTargets } from '../hooks/useTargets';
 
 
 function Fact({ label, children }) {
@@ -55,14 +54,29 @@ function SchemaSection({ target, detail, onReloadTargets }) {
   return detail.data ? <TargetSchema detail={detail.data} /> : null;
 }
 
-export default function TargetSelectionPage({ initialTargetId = null, onContinue, onOpenDemo }) {
-  const targets = useTargets();
-  const [selectedId, setSelectedId] = useState(initialTargetId);
-  const detail = useTargetDetail(selectedId);
+const databaseOption = (d) => ({
+  value: d.database_id,
+  label: `${d.display_name} (${d.file_name})${d.is_default ? ' · default' : ''}`,
+});
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+export default function TargetSelectionPage({ initialDatabaseId = null, initialTargetId = null, onContinue }) {
+  const databases = useDatabases();
+  const [databaseId, setDatabaseId] = useState(initialDatabaseId);
+  const targets = useTargets(databaseId);
+  const [selectedId, setSelectedId] = useState(initialTargetId);
+  const detail = useTargetDetail(selectedId, databaseId);
+
+  const database = databases.data?.find((d) => d.database_id === databaseId) ?? null;
   const selected = targets.data?.find((t) => t.target_id === selectedId) ?? null;
   // Continue only once the schema for the current selection has loaded without error.
-  const canContinue = Boolean(selected && detail.data?.target_id === selected.target_id && !detail.loading && !detail.error);
+  const canContinue = Boolean(database && selected && detail.data?.target_id === selected.target_id
+    && !detail.loading && !detail.error);
+  const chooseDatabase = (id) => {
+    if (id === databaseId) return;
+    setDatabaseId(id);
+    setSelectedId(null); // tables belong to one database
+  };
   const reloadTargets = () => {
     setSelectedId(null);
     targets.reload();
@@ -74,8 +88,8 @@ export default function TargetSelectionPage({ initialTargetId = null, onContinue
         <div>
           <Title order={1} fz={{ base: 26, sm: 32 }}>Load data into a target table</Title>
           <Text c="dimmed" mt="xs">
-            Pick the table to load. Your CSV will be validated against its schema and constraints before anything
-            is written, and failures are investigated by the AI.
+            Pick the database and the table to load. Your CSV will be validated against the table&apos;s schema and
+            constraints before anything is written, and failures are investigated by the AI.
           </Text>
         </div>
 
@@ -86,35 +100,58 @@ export default function TargetSelectionPage({ initialTargetId = null, onContinue
               <Title order={2} fz="lg">Select target</Title>
             </Group>
 
-            {targets.loading && (
-              <Group gap="xs" aria-busy="true"><Loader size="xs" /><Text size="sm" c="dimmed">Loading targets…</Text></Group>
+            {databases.loading && (
+              <Group gap="xs" aria-busy="true"><Loader size="xs" /><Text size="sm" c="dimmed">Loading databases…</Text></Group>
             )}
-            {targets.error && (
-              <ErrorAlert title="Could not load the target tables" error={targets.error} onRetry={targets.reload} />
+            {databases.error && (
+              <ErrorAlert title="Could not load the databases" error={databases.error} onRetry={databases.reload} />
             )}
-            {targets.data && targets.data.length === 0 && (
-              <Alert color="gray" variant="light" title="No target tables">
-                The backend has no target tables configured.
-              </Alert>
+            {databases.data && databases.data.length === 0 && (
+              <Alert color="gray" variant="light" title="No databases">The backend found no SQLite databases.</Alert>
             )}
-            {targets.data && targets.data.length > 0 && (
+            {databases.data && databases.data.length > 0 && (
+              <Select
+                label="Database"
+                placeholder="Choose a database"
+                data={databases.data.map(databaseOption)}
+                value={databaseId}
+                onChange={chooseDatabase}
+                allowDeselect={false}
+                checkIconPosition="right"
+              />
+            )}
+
+            {database && targets.loading && (
+              <Group gap="xs" aria-busy="true"><Loader size="xs" /><Text size="sm" c="dimmed">Loading tables…</Text></Group>
+            )}
+            {database && targets.error && (
+              <ErrorAlert title={`Could not load the tables of ${database.display_name}`} error={targets.error}
+                onRetry={targets.reload} />
+            )}
+            {database && targets.data && targets.data.length === 0 && (
+              <Alert color="gray" variant="light" title="No tables">{database.file_name} has no tables to load into.</Alert>
+            )}
+            {database && targets.data && targets.data.length > 0 && (
               <Select
                 label="Target table"
+                description={`${plural(targets.data.length, 'table')} in ${database.display_name}`}
                 placeholder="Choose a target table"
                 data={targets.data.map((t) => ({ value: t.target_id, label: t.display_name }))}
                 value={selectedId}
                 onChange={setSelectedId}
                 allowDeselect={false}
                 checkIconPosition="right"
-                comboboxProps={{ withinPortal: false }}
               />
             )}
 
-            {selected && (
+            {database && selected && (
               <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md">
+                <Fact label="Database">
+                  {database.display_name}{' '}
+                  <Text span size="xs" c="dimmed" ff="monospace">({database.file_name})</Text>
+                </Fact>
                 <Fact label="Target">{selected.display_name}</Fact>
                 <Fact label="Table"><Text span ff="monospace" size="sm">{selected.table_name}</Text></Fact>
-                <Fact label="Database">{databaseLabel(selected.database_type)}</Fact>
               </SimpleGrid>
             )}
             {selected?.description && <Fact label="Description">{selected.description}</Fact>}
@@ -130,14 +167,11 @@ export default function TargetSelectionPage({ initialTargetId = null, onContinue
           </Card>
         )}
 
-        <Group justify="space-between">
-          <Anchor component="button" size="sm" onClick={onOpenDemo}>
-            <Group gap={4}><IconPlayerPlay size={14} /> Try the demo instead</Group>
-          </Anchor>
-          <Tooltip label="Select a target and wait for its schema to load" disabled={canContinue}>
+        <Group justify="flex-end">
+          <Tooltip label="Select a database and a table, and wait for its schema to load" disabled={canContinue}>
             {/* A disabled button fires no mouse events, so the tooltip needs a wrapper. */}
             <span>
-              <Button rightSection={<IconArrowRight size={16} />} disabled={!canContinue} onClick={() => onContinue(selected)}>
+              <Button rightSection={<IconArrowRight size={16} />} disabled={!canContinue} onClick={() => onContinue({ database, target: selected })}>
                 Continue
               </Button>
             </span>

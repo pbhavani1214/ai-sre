@@ -16,17 +16,7 @@ body {
   border-radius: var(--mantine-radius-md);
 }
 
-.log-line {
-  font-family: var(--mantine-font-family-monospace);
-  font-size: 13px;
-}
 
-.row-issue td {
-  background: light-dark(var(--mantine-color-red-0), rgba(250, 82, 82, 0.1));
-}
-.row-warn td {
-  background: light-dark(var(--mantine-color-yellow-0), rgba(250, 176, 5, 0.08));
-}
 
 /* Keep tab rows on one line on small screens; scroll sideways instead of wrapping. */
 .scroll-tabs {

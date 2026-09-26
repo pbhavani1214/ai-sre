@@ -2,9 +2,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TargetSelectionPage from './TargetSelectionPage';
-import { deferred, mockFetch, renderWithMantine } from '../test/utils';
+import { deferred, mockFetch as mockRoutes, renderWithMantine } from '../test/utils';
 
 // Deliberately not the customer demo: the page must render whatever the API returns.
+const DATABASES = {
+  databases: [
+    { database_id: 'shop', display_name: 'Web shop', file_name: 'shop.db', database_type: 'sqlite', table_count: 2, is_default: true },
+    { database_id: 'archive', display_name: 'Archive', file_name: 'archive.sqlite', database_type: 'sqlite', table_count: 0, is_default: false },
+  ],
+};
+const SHOP = 'Web shop (shop.db) · default';
+
+/** Every test lists the databases unless it overrides that route. */
+const mockFetch = (routes) => mockRoutes({ 'GET /api/databases': () => [200, DATABASES], ...routes });
+
 const TARGETS = {
   targets: [
     { target_id: 'orders', table_name: 'sales_orders', display_name: 'Sales orders',
@@ -31,26 +42,68 @@ const ORDERS_DETAIL = {
   ],
 };
 
+async function chooseDatabase(user, label = SHOP) {
+  await user.click(await screen.findByRole('combobox', { name: 'Database' }));
+  await user.click(await screen.findByRole('option', { name: label }));
+}
+
 async function chooseTarget(user, label) {
+  if (!screen.queryByRole('combobox', { name: 'Target table' })) await chooseDatabase(user);
   await user.click(await screen.findByRole('combobox', { name: 'Target table' }));
   await user.click(await screen.findByRole('option', { name: label }));
 }
 
 describe('TargetSelectionPage', () => {
-  it('shows a loading state, then lists the targets from GET /api/targets', async () => {
-    const pending = deferred();
-    const fetch = mockFetch({ 'GET /api/targets': () => pending.promise });
+  it('lists the databases, then the tables of the chosen database, with loading states', async () => {
+    const dbs = deferred();
+    const tables = deferred();
+    const fetch = mockFetch({ 'GET /api/databases': () => dbs.promise, 'GET /api/targets': () => tables.promise });
     renderWithMantine(<TargetSelectionPage />);
-
-    expect(screen.getByText('Loading targets…')).toBeInTheDocument();
-    pending.resolve([200, TARGETS]);
-
     const user = userEvent.setup();
+
+    expect(screen.getByText('Loading databases…')).toBeInTheDocument();
+    dbs.resolve([200, DATABASES]);
+    await user.click(await screen.findByRole('combobox', { name: 'Database' }));
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent))
+      .toEqual([SHOP, 'Archive (archive.sqlite)']);
+    expect(screen.queryByRole('combobox', { name: 'Target table' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('option', { name: SHOP }));
+    expect(await screen.findByText('Loading tables…')).toBeInTheDocument();
+    tables.resolve([200, TARGETS]);
     await user.click(await screen.findByRole('combobox', { name: 'Target table' }));
-    const options = await screen.findAllByRole('option');
-    expect(options.map((o) => o.textContent)).toEqual(['Sales orders', 'Product catalog']);
-    expect(screen.queryByText('Loading targets…')).not.toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith('http://api.test/api/targets', expect.anything());
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Sales orders', 'Product catalog']);
+    expect(screen.getByText('2 tables in Web shop')).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith('http://api.test/api/targets?database_id=shop', expect.anything());
+  });
+
+  it('changing the database clears the table and loads that database\'s tables', async () => {
+    const fetch = mockFetch({
+      'GET /api/targets': () => [200, TARGETS],
+      'GET /api/targets/orders': () => [200, ORDERS_DETAIL],
+    });
+    renderWithMantine(<TargetSelectionPage onContinue={vi.fn()} />);
+    const user = userEvent.setup();
+    await chooseTarget(user, 'Sales orders');
+    await screen.findByRole('table', { name: 'Target columns' });
+
+    fetch.mockImplementation(async (url) => new Response(JSON.stringify(
+      new URL(url).pathname === '/api/targets' ? { targets: [] } : DATABASES,
+    ), { status: 200 }));
+    await chooseDatabase(user, 'Archive (archive.sqlite)');
+    expect(await screen.findByText('archive.sqlite has no tables to load into.')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Target columns' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(fetch).toHaveBeenCalledWith('http://api.test/api/targets?database_id=archive', expect.anything());
+  });
+
+  it('shows an error with retry when the databases cannot be listed', async () => {
+    mockFetch({ 'GET /api/databases': () => [500, { detail: { code: 'internal_error', message: 'Database folder unreadable.', field: null } }] });
+    renderWithMantine(<TargetSelectionPage />);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not load the databases');
+    expect(alert).toHaveTextContent('Database folder unreadable.');
+    expect(within(alert).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
   it('shows the selected target summary using the API fields', async () => {
@@ -63,7 +116,8 @@ describe('TargetSelectionPage', () => {
 
     expect(screen.getAllByText('Sales orders').length).toBeGreaterThan(0);
     expect(screen.getAllByText('sales_orders').length).toBeGreaterThan(0);
-    expect(screen.getByText('SQLite')).toBeInTheDocument();
+    expect(screen.getByText('Web shop')).toBeInTheDocument();
+    expect(screen.getByText('(shop.db)')).toBeInTheDocument();
     expect(screen.getByText('Orders placed through the web shop')).toBeInTheDocument();
   });
 
@@ -77,7 +131,7 @@ describe('TargetSelectionPage', () => {
     await chooseTarget(userEvent.setup(), 'Sales orders');
 
     expect(await screen.findByText('Loading target schema…')).toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith('http://api.test/api/targets/orders', expect.anything());
+    expect(fetch).toHaveBeenCalledWith('http://api.test/api/targets/orders?database_id=shop', expect.anything());
     pending.resolve([200, ORDERS_DETAIL]);
     expect(await screen.findByRole('table', { name: 'Target columns' })).toBeInTheDocument();
     expect(screen.queryByText('Loading target schema…')).not.toBeInTheDocument();
@@ -118,9 +172,10 @@ describe('TargetSelectionPage', () => {
         : [200, TARGETS]),
     });
     renderWithMantine(<TargetSelectionPage />);
+    await chooseDatabase(userEvent.setup());
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Could not load the target tables');
+    expect(alert).toHaveTextContent('Could not load the tables of Web shop');
     expect(alert).toHaveTextContent('The target database could not be opened.');
     expect(alert).not.toHaveTextContent('Traceback');
 
@@ -129,11 +184,11 @@ describe('TargetSelectionPage', () => {
   });
 
   it('shows a network error without falling back to any bundled data', async () => {
-    mockFetch({ 'GET /api/targets': () => { throw new TypeError('Failed to fetch'); } });
+    mockFetch({ 'GET /api/databases': () => { throw new TypeError('Failed to fetch'); } });
     renderWithMantine(<TargetSelectionPage />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the backend at http://api.test');
-    expect(screen.queryByRole('combobox', { name: 'Target table' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Database' })).not.toBeInTheDocument();
   });
 
   it('handles 404 target_not_found for the selected target', async () => {
@@ -172,14 +227,12 @@ describe('TargetSelectionPage', () => {
     expect(screen.getByText('This table declares no constraints.')).toBeInTheDocument();
   });
 
-  it('keeps Continue disabled until a target is selected, and offers the demo', async () => {
+  it('keeps Continue disabled until a target is selected, and has no demo link', async () => {
     mockFetch({ 'GET /api/targets': () => [200, TARGETS] });
-    const onOpenDemo = vi.fn();
-    renderWithMantine(<TargetSelectionPage onOpenDemo={onOpenDemo} />);
+    renderWithMantine(<TargetSelectionPage onContinue={vi.fn()} />);
 
     expect(await screen.findByRole('button', { name: 'Continue' })).toBeDisabled();
-    await userEvent.setup().click(screen.getByRole('button', { name: /Try the demo instead/ }));
-    expect(onOpenDemo).toHaveBeenCalled();
+    expect(screen.queryByText(/try the demo/i)).not.toBeInTheDocument();
   });
 
   it('enables Continue only after the selected target schema has loaded, then continues with that target', async () => {
@@ -199,7 +252,7 @@ describe('TargetSelectionPage', () => {
     await waitFor(() => expect(button).toBeEnabled());
 
     await user.click(button);
-    expect(onContinue).toHaveBeenCalledWith(TARGETS.targets[0]);
+    expect(onContinue).toHaveBeenCalledWith({ database: DATABASES.databases[0], target: TARGETS.targets[0] });
   });
 
   it('keeps Continue disabled when the schema fails to load', async () => {

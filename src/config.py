@@ -16,6 +16,14 @@ def cors_origins() -> list[str]:
     return [o.strip() for o in raw.split(",") if o.strip()]
 
 
+def target_db_dir() -> Path:
+    """The folder whose SQLite files (*.db, *.sqlite, *.sqlite3) are the databases a user can choose from."""
+    return Path(os.getenv("TARGET_DB_DIR") or DATA_DIR / "databases")
+
+
 def target_db_path() -> Path:
-    """The SQLite target (warehouse) database that uploads are loaded into."""
-    return Path(os.getenv("TARGET_DB_PATH") or DATA_DIR / "target.db")
+    """The default SQLite target database, used when a request names no database_id.
+
+    TARGET_DB_PATH overrides it; otherwise it is the demo CRM database in TARGET_DB_DIR.
+    """
+    return Path(os.getenv("TARGET_DB_PATH") or target_db_dir() / "crm.db")

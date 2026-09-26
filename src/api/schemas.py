@@ -143,12 +143,26 @@ class ApiErrorDetail(BaseModel):
     field: str | None = None
 
 
+class DatabaseOut(BaseModel):
+    database_id: str
+    display_name: str
+    file_name: str
+    database_type: Literal["sqlite"]
+    table_count: int
+    is_default: bool
+
+
+class DatabaseListResponse(BaseModel):
+    databases: list[DatabaseOut]
+
+
 class TargetOut(BaseModel):
     target_id: str
     table_name: str
     display_name: str
     description: str | None = None
     database_type: Literal["sqlite"]
+    database_id: str
 
 
 class TargetListResponse(BaseModel):
@@ -174,6 +188,7 @@ class TargetSchemaResponse(BaseModel):
     target_id: str
     table_name: str
     database_type: Literal["sqlite"]
+    database_id: str
     columns: list[TargetColumnOut]
     constraints: list[TargetConstraintOut]
 
@@ -207,6 +222,7 @@ class LoadResult(BaseModel):
 class RunSummary(BaseModel):
     run_id: str
     parent_run_id: str | None
+    database_id: str
     target_id: str
     target_table: str
     file_name: str
@@ -219,10 +235,47 @@ class RunSummary(BaseModel):
     investigation: "RunInvestigateResponse | None" = None  # latest AI investigation of this run, if any
 
 
+class CauseGroupOut(BaseModel):
+    title: str
+    category: str
+    explanation: str
+    checks: list[str]
+    rows: list[int]
+    evidence: list[str]
+
+
+class RowFixOut(BaseModel):
+    row: int
+    column: str | None
+    action: Literal["REPLACE", "DELETE_ROW", "NEEDS_DECISION"]
+    current_value: str | None
+    suggested_value: str | None
+    reason: str
+    confidence: Literal["HIGH", "MEDIUM", "LOW"]
+    evidence: str
+    satisfies_constraints: bool
+
+
 class RunInvestigateResponse(InvestigateResponse):
-    """POST /api/runs/{run_id}/investigate: the existing investigation structure plus the run it belongs to."""
+    """POST /api/runs/{run_id}/investigate: the existing investigation structure plus the run it belongs to, and
+    (v2.2) the failures grouped by cause, row-level fixes, prevention steps and the model used."""
 
     run_id: str
+    cause_groups: list[CauseGroupOut] = Field(default_factory=list)
+    row_fixes: list[RowFixOut] = Field(default_factory=list)
+    prevention: list[str] = Field(default_factory=list)
+    model: str | None = None
+
+    @classmethod
+    def from_run_result(cls, run_id: str, r: InvestigationResult) -> "RunInvestigateResponse":
+        return cls(
+            run_id=run_id,
+            **InvestigateResponse.from_result(r).model_dump(),
+            cause_groups=[CauseGroupOut(**vars(g)) for g in r.cause_groups],
+            row_fixes=[RowFixOut(**vars(f)) for f in r.row_fixes],
+            prevention=r.prevention,
+            model=r.model or None,
+        )
 
 
 RunSummary.model_rebuild()

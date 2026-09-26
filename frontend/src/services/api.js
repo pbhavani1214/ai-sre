@@ -1,12 +1,7 @@
-import scenarioMock from '../data/scenario.json';
-import investigationMock from '../data/investigation.mock.json';
-
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
-/** True when no backend is configured and the UI runs on bundled sample data. */
+/** True when VITE_API_BASE_URL is not set. The app needs the backend; there is no offline or sample-data mode. */
 export const USE_MOCK = !BASE_URL;
-
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** An HTTP or network error, keeping the structured fields of `{detail: {code, message, field}}`. */
 export class ApiError extends Error {
@@ -70,31 +65,42 @@ function requireBackend() {
   }
 }
 
-/** @returns {Promise<import('../types').TargetSummary[]>} */
-export async function listTargets() {
+/** GET /api/databases: the SQLite databases a user can choose from (the default one first). */
+export async function listDatabases() {
   requireBackend();
-  const { targets } = await request('/api/targets');
+  const { databases } = await request('/api/databases');
+  return databases;
+}
+
+const withDatabase = (path, databaseId) => (databaseId ? `${path}?database_id=${encodeURIComponent(databaseId)}` : path);
+
+/** GET /api/targets?database_id=: the tables of one database. @returns {Promise<import('../types').TargetSummary[]>} */
+export async function listTargets(databaseId) {
+  requireBackend();
+  const { targets } = await request(withDatabase('/api/targets', databaseId));
   return targets;
 }
 
 /** @returns {Promise<import('../types').TargetDetail>} */
-export async function getTarget(targetId) {
+export async function getTarget(targetId, databaseId) {
   requireBackend();
-  return request(`/api/targets/${encodeURIComponent(targetId)}`);
+  return request(withDatabase(`/api/targets/${encodeURIComponent(targetId)}`, databaseId));
 }
 
 /**
  * POST /api/runs: creates a run from ONE uploaded CSV for the selected target (multipart/form-data).
- * Sends exactly `target_id` and `file`. The backend owns validation.
+ * Sends `target_id`, `file` and, when a database was chosen, `database_id`. The backend owns validation.
  * @param {string} targetId
  * @param {File} file
+ * @param {string} [databaseId]
  * @returns {Promise<import('../types').RunSummary>}
  */
-export async function createRun(targetId, file) {
+export async function createRun(targetId, file, databaseId) {
   requireBackend();
   const form = new FormData();
   form.append('target_id', targetId);
   form.append('file', file);
+  if (databaseId) form.append('database_id', databaseId);
   // No content-type header: the browser sets multipart/form-data with its boundary.
   return request('/api/runs', { method: 'POST', body: form });
 }
@@ -128,42 +134,24 @@ export async function retryRun(runId, file) {
 }
 
 /**
- * The demo run: the deterministic validation state plus the raw run record and datasets.
- * @returns {Promise<import('../types').Scenario>}
+ * GET /api/runs/{run_id}/suggested-csv: the uploaded file with the investigation's REPLACE and DELETE_ROW fixes applied
+ * (CONTRACT.md §16, v2.2). Returns the CSV text. Nothing is validated until the file is retried.
+ * @returns {Promise<string>}
  */
-export async function getScenario() {
-  if (USE_MOCK) {
-    await delay(300);
-    return scenarioMock;
+export async function getSuggestedCsv(runId) {
+  requireBackend();
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}/api/runs/${encodeURIComponent(runId)}/suggested-csv`);
+  } catch {
+    throw new ApiError(`Could not reach the backend at ${BASE_URL}. Is it running?`, { code: 'network_error' });
   }
-  const [scenario, run] = await Promise.all([request('/api/demo/scenario'), request('/api/demo/run')]);
-  return { ...scenario, ...run };
+  if (!res.ok) throw parseError(res.status, await res.text().catch(() => ''));
+  return res.text();
 }
 
-/** @returns {Promise<import('../types').Health | null>} null in mock mode */
+/** @returns {Promise<import('../types').Health | null>} null when no backend is configured */
 export async function getHealth() {
   if (USE_MOCK) return null;
   return request('/health');
-}
-
-/**
- * Asks the backend to investigate the demo run. The backend re-runs the validation suite on the
- * bundled data itself (use_demo_data), so the AI sees exactly the evidence shown in the UI.
- * @param {import('../types').Scenario} scenario
- * @returns {Promise<import('../types').InvestigationResult>}
- */
-export async function runInvestigation(scenario) {
-  if (USE_MOCK) {
-    await delay(3500);
-    return investigationMock;
-  }
-  return request('/api/investigate', {
-    method: 'POST',
-    json: {
-      pipeline_name: scenario.pipeline_name,
-      pipeline_description: scenario.pipeline_description,
-      execution_summary: scenario.execution_summary,
-      use_demo_data: true,
-    },
-  });
 }

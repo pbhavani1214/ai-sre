@@ -2,59 +2,13 @@
  * Shapes of the JSON exchanged with the backend. They mirror the Pydantic models in
  * src/api/schemas.py (the source of truth for the contract).
  *
- * @typedef {Object} CheckResult  one entry of GET /api/demo/scenario validation_results
- * @property {string} name        e.g. "duplicate_customer_id"
- * @property {'PASSED'|'FAILED'} status
- * @property {'HIGH'|'MEDIUM'|'LOW'} severity
- * @property {string} summary
- * @property {Object<string, any>} metrics   numbers, or id/value -> count maps
- * @property {string[]} evidence             human-readable lines (capped by the backend)
- *
- * @typedef {Object} PipelineStep
- * @property {string} name
- * @property {string} status
- * @property {number} rows_in
- * @property {number} [rows_out]
- * @property {number} [rows_written]
- * @property {number} [batches]
- * @property {string[]} [warnings]
- *
- * @typedef {Object} PipelineRun
- * @property {string} run_id
- * @property {string} pipeline
- * @property {string} started_at
- * @property {string} finished_at
- * @property {string} status
- * @property {Object<string, any>} config
- * @property {PipelineStep[]} steps
- * @property {string[]} logs
- *
- * @typedef {Object} ExecutionSummary
- * @property {number} source_records
- * @property {number} target_records
- * @property {string} [run_id]
- * @property {string} [reported_run_status]
- * @property {string} [started_at]
- * @property {string} [finished_at]
- *
- * @typedef {Object} Scenario  GET /api/demo/scenario merged with GET /api/demo/run
- * @property {string} pipeline_name
- * @property {string} pipeline_description
- * @property {'PASSED'|'FAILED'} status
- * @property {ExecutionSummary} execution_summary
- * @property {{total_checks: number, passed_checks: number, failed_checks: number}} validation_summary
- * @property {CheckResult[]} validation_results
- * @property {PipelineRun} pipeline_run
- * @property {Object<string, any>[]} source
- * @property {Object<string, any>[]} target
- *
  * @typedef {Object} Hypothesis
  * @property {string} hypothesis
  * @property {'SUPPORTED'|'REJECTED'|'INCONCLUSIVE'} status
  * @property {string[]} evidence   "[evidence.id] observation" lines
  * @property {string} reasoning
  *
- * @typedef {Object} InvestigationResult  POST /api/investigate
+ * @typedef {Object} InvestigationResult  AI investigation (the shape of POST /api/runs/{run_id}/investigate)
  * @property {string} summary
  * @property {string[]} observed_facts
  * @property {Hypothesis[]} hypotheses
@@ -70,12 +24,21 @@
  *
  * --- Live flow: target tables (AI_SRE_CONTRACT_v2 §6-7) ---
  *
- * @typedef {Object} TargetSummary  one entry of GET /api/targets -> {targets: TargetSummary[]}
+ * @typedef {Object} DatabaseSummary  one entry of GET /api/databases -> {databases: DatabaseSummary[]} (§5a)
+ * @property {string} database_id     stable ID used in API calls; never build file paths from it
+ * @property {string} display_name
+ * @property {string} file_name
+ * @property {string} database_type   "sqlite"
+ * @property {number} table_count
+ * @property {boolean} is_default
+ *
+ * @typedef {Object} TargetSummary  one entry of GET /api/targets?database_id= -> {targets: TargetSummary[]}
  * @property {string} target_id       stable ID used in API calls; never build table names from it
  * @property {string} table_name      the actual database table
  * @property {string} display_name
  * @property {string} [description]
  * @property {string} database_type   "sqlite"
+ * @property {string} database_id
  *
  * @typedef {Object} TargetColumn
  * @property {string} name
@@ -94,6 +57,7 @@
  * @property {string} target_id
  * @property {string} table_name
  * @property {string} database_type
+ * @property {string} database_id
  * @property {TargetColumn[]} columns
  * @property {TargetConstraint[]} constraints
  *
@@ -118,6 +82,7 @@
  * @typedef {Object} RunSummary  POST /api/runs (201), GET /api/runs/{run_id}
  * @property {string} run_id
  * @property {string|null} parent_run_id
+ * @property {string} database_id     the database the target belongs to (a retry inherits its parent's)
  * @property {string} target_id
  * @property {string} target_table
  * @property {string} file_name
@@ -129,7 +94,27 @@
  * @property {Object<string, any> | null} load_result   CONTRACT.md §14/§22: {rows_loaded, target_table}; rendered
  *                                                     generically so any fields the backend adds are shown
  *
- * @typedef {InvestigationResult & {run_id: string}} RunInvestigation  POST /api/runs/{run_id}/investigate (§16)
+ * @typedef {Object} CauseGroup  failures grouped by likely origin (v2.2)
+ * @property {string} title
+ * @property {'SOURCE_FORMAT'|'DATA_ENTRY'|'DUPLICATE_RECORD'|'NEW_VALUE'|'EXISTING_DATA'|'OTHER'|string} category
+ * @property {string} explanation
+ * @property {string[]} checks
+ * @property {number[]} rows
+ * @property {string[]} evidence
+ *
+ * @typedef {Object} RowFix  one suggested change to the uploaded file, checked by the backend (v2.2)
+ * @property {number} row                file line number (row 1 is the header)
+ * @property {string|null} column
+ * @property {'REPLACE'|'DELETE_ROW'|'NEEDS_DECISION'} action
+ * @property {string|null} current_value  read from the file by the backend
+ * @property {string|null} suggested_value
+ * @property {string} reason
+ * @property {'HIGH'|'MEDIUM'|'LOW'} confidence
+ * @property {string} evidence
+ * @property {boolean} satisfies_constraints  the suggestion passes the column's type, NOT NULL and CHECK rules
+ *
+ * @typedef {InvestigationResult & {run_id: string, cause_groups: CauseGroup[], row_fixes: RowFix[],
+ *   prevention: string[], model: string|null}} RunInvestigation  POST /api/runs/{run_id}/investigate (§16)
  *
  * @typedef {Object} Health  GET /health
  * @property {'ok'} status

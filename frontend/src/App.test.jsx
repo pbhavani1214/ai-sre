@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event';
 import App from './App';
 import { mockFetch, renderWithMantine } from './test/utils';
 
+const DATABASES = {
+  databases: [{ database_id: 'shop', display_name: 'Web shop', file_name: 'shop.db', database_type: 'sqlite', table_count: 1, is_default: true }],
+};
 const TARGETS = {
   targets: [{ target_id: 'orders', table_name: 'sales_orders', display_name: 'Sales orders', description: 'Web shop orders', database_type: 'sqlite' }],
 };
@@ -13,7 +16,7 @@ const DETAIL = {
   constraints: [{ type: 'PRIMARY_KEY', columns: ['order_id'], description: 'order_id must be unique and non-null' }],
 };
 const RUN = {
-  run_id: 'run_9f8e7d6c5b4a', parent_run_id: null, target_id: 'orders', target_table: 'sales_orders',
+  run_id: 'run_9f8e7d6c5b4a', parent_run_id: null, database_id: 'shop', target_id: 'orders', target_table: 'sales_orders',
   file_name: 'orders_2026-09-26.csv', status: 'CREATED', created_at: '2026-09-26T10:30:00Z', completed_at: null,
   summary: { rows_received: 1250, checks_total: 0, checks_passed: 0, checks_failed: 0 },
   validation_results: [], load_result: null,
@@ -21,8 +24,9 @@ const RUN = {
 
 describe('live flow: target selection -> upload -> run created', () => {
   it('walks from target selection to a created run', async () => {
-    mockFetch({
+    const fetch = mockFetch({
       'GET /health': () => [200, { status: 'ok', llm_configured: true, details: {} }],
+      'GET /api/databases': () => [200, DATABASES],
       'GET /api/targets': () => [200, TARGETS],
       'GET /api/targets/orders': () => [200, DETAIL],
       'POST /api/runs': () => [201, RUN],
@@ -31,6 +35,8 @@ describe('live flow: target selection -> upload -> run created', () => {
     const user = userEvent.setup();
 
     // 1. Target selection
+    await user.click(await screen.findByRole('combobox', { name: 'Database' }));
+    await user.click(await screen.findByRole('option', { name: 'Web shop (shop.db) · default' }));
     await user.click(await screen.findByRole('combobox', { name: 'Target table' }));
     await user.click(await screen.findByRole('option', { name: 'Sales orders' }));
     const continueButton = screen.getByRole('button', { name: 'Continue' });
@@ -45,6 +51,10 @@ describe('live flow: target selection -> upload -> run created', () => {
 
     // 3. Run created: only what the backend returned, no validation/load/AI claims
     expect(await screen.findByRole('heading', { name: 'Run created' })).toBeInTheDocument();
+    const post = fetch.mock.calls.find(([u, i]) => u.endsWith('/api/runs') && i?.method === 'POST');
+    expect([...post[1].body.keys()]).toEqual(['target_id', 'file', 'database_id']);
+    expect(post[1].body.get('database_id')).toBe('shop');
+    expect(screen.getByTestId('run-database')).toHaveTextContent('in Web shop (shop.db)');
     expect(screen.getByTestId('run-id')).toHaveTextContent('run_9f8e7d6c5b4a');
     expect(screen.getByTestId('run-status')).toHaveTextContent('CREATED');
     expect(screen.getByText('Sales orders')).toBeInTheDocument();
@@ -57,18 +67,22 @@ describe('live flow: target selection -> upload -> run created', () => {
     await user.click(screen.getByRole('button', { name: 'Upload another file' }));
     expect(await screen.findByRole('heading', { name: 'Upload a CSV' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('combobox', { name: 'Database' })).toHaveValue('Web shop (shop.db) · default');
     expect(await screen.findByRole('combobox', { name: 'Target table' })).toHaveValue('Sales orders');
   });
 
   it('shows any non-CREATED status as returned, without claiming success', async () => {
     mockFetch({
       'GET /health': () => [200, { status: 'ok', llm_configured: true, details: {} }],
+      'GET /api/databases': () => [200, DATABASES],
       'GET /api/targets': () => [200, TARGETS],
       'GET /api/targets/orders': () => [200, DETAIL],
       'POST /api/runs': () => [201, { ...RUN, status: 'FAILED_VALIDATION' }],
     });
     renderWithMantine(<App />);
     const user = userEvent.setup();
+    await user.click(await screen.findByRole('combobox', { name: 'Database' }));
+    await user.click(await screen.findByRole('option', { name: 'Web shop (shop.db) · default' }));
     await user.click(await screen.findByRole('combobox', { name: 'Target table' }));
     await user.click(await screen.findByRole('option', { name: 'Sales orders' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
@@ -80,7 +94,7 @@ describe('live flow: target selection -> upload -> run created', () => {
     expect(screen.queryByText('Ready for validation')).not.toBeInTheDocument();
   });
 
-  it('demo story: failed validation -> investigate -> corrected retry -> SUCCEEDED, parent kept unchanged', async () => {
+  it('full live flow: failed validation -> investigate -> corrected retry -> SUCCEEDED, parent kept unchanged', async () => {
     const FAILED = { ...RUN, status: 'FAILED_VALIDATION', completed_at: '2026-09-26T10:30:01Z',
       summary: { rows_received: 7, checks_total: 2, checks_passed: 1, checks_failed: 1 },
       validation_results: [
@@ -99,6 +113,7 @@ describe('live flow: target selection -> upload -> run created', () => {
       validation_results: [], load_result: { rows_loaded: 6, target_table: 'sales_orders' } };
     const fetch = mockFetch({
       'GET /health': () => [200, { status: 'ok', llm_configured: true, details: {} }],
+      'GET /api/databases': () => [200, DATABASES],
       'GET /api/targets': () => [200, TARGETS],
       'GET /api/targets/orders': () => [200, DETAIL],
       'POST /api/runs': () => [201, FAILED],
@@ -107,6 +122,8 @@ describe('live flow: target selection -> upload -> run created', () => {
     });
     renderWithMantine(<App />);
     const user = userEvent.setup();
+    await user.click(await screen.findByRole('combobox', { name: 'Database' }));
+    await user.click(await screen.findByRole('option', { name: 'Web shop (shop.db) · default' }));
     await user.click(await screen.findByRole('combobox', { name: 'Target table' }));
     await user.click(await screen.findByRole('option', { name: 'Sales orders' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
@@ -142,6 +159,7 @@ describe('live flow: target selection -> upload -> run created', () => {
     const CHILD = { ...FAILED, run_id: 'run_222222222222', parent_run_id: FAILED.run_id, file_name: 'still_bad.csv' };
     const fetch = mockFetch({
       'GET /health': () => [200, { status: 'ok', llm_configured: true, details: {} }],
+      'GET /api/databases': () => [200, DATABASES],
       'GET /api/targets': () => [200, TARGETS],
       'GET /api/targets/orders': () => [200, DETAIL],
       'POST /api/runs': () => [201, FAILED],
@@ -150,6 +168,8 @@ describe('live flow: target selection -> upload -> run created', () => {
     });
     renderWithMantine(<App />);
     const user = userEvent.setup();
+    await user.click(await screen.findByRole('combobox', { name: 'Database' }));
+    await user.click(await screen.findByRole('option', { name: 'Web shop (shop.db) · default' }));
     await user.click(await screen.findByRole('combobox', { name: 'Target table' }));
     await user.click(await screen.findByRole('option', { name: 'Sales orders' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());

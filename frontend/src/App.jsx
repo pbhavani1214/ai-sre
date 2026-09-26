@@ -4,16 +4,15 @@ import AppHeader from './components/AppHeader';
 import TargetSelectionPage from './pages/TargetSelectionPage';
 import UploadPage from './pages/UploadPage';
 import RunResultPage from './pages/RunResultPage';
-import InvestigationPage from './pages/InvestigationPage';
 import { getRun } from './services/api';
 
 /**
  * Live flow: target selection -> CSV upload -> run result (validation, AI investigation, corrected retry, load).
  * `runs` and `investigations` are keyed by run_id so a retry (child run) and its original (parent) each keep their
- * own state; showing one never changes the other. The bundled demo stays one link away.
+ * own state; showing one never changes the other.
  */
 export default function App() {
-  const [view, setView] = useState({ name: 'targets', target: null, runId: null });
+  const [view, setView] = useState({ name: 'targets', database: null, target: null, runId: null });
   const [runs, setRuns] = useState({});
   const [investigations, setInvestigations] = useState({});
   const [openError, setOpenError] = useState(null);
@@ -46,13 +45,13 @@ export default function App() {
       <AppShell.Main>
         {view.name === 'targets' && (
           <TargetSelectionPage
+            initialDatabaseId={view.database?.database_id ?? null}
             initialTargetId={view.target?.target_id ?? null}
-            onContinue={(target) => go('upload', { target, runId: null })}
-            onOpenDemo={() => go('demo')}
+            onContinue={({ database, target }) => go('upload', { database, target, runId: null })}
           />
         )}
         {view.name === 'upload' && (
-          <UploadPage target={view.target} onBack={() => go('targets')} onCreated={showRun} />
+          <UploadPage database={view.database} target={view.target} onBack={() => go('targets')} onCreated={showRun} />
         )}
         {view.name === 'run' && run && (
           <>
@@ -65,6 +64,7 @@ export default function App() {
               key={run.run_id}
               run={run}
               target={view.target}
+              database={view.database}
               investigation={investigations[run.run_id] ?? null}
               onInvestigation={(result) => setInvestigations((m) => ({ ...m, [run.run_id]: result }))}
               onRetried={showRun}
@@ -74,7 +74,6 @@ export default function App() {
             />
           </>
         )}
-        {view.name === 'demo' && <InvestigationPage />}
       </AppShell.Main>
     </AppShell>
   );
