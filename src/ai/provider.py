@@ -71,7 +71,7 @@ class AnthropicProvider(LLMProvider):
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = "https://api.openai.com/v1",
+    def __init__(self, api_key: str, model: str = "gpt-4o", base_url: str = "https://api.openai.com/v1",
                  timeout: float = 120):
         self.api_key, self.model, self.base_url, self.timeout = api_key, model, base_url.rstrip("/"), timeout
 

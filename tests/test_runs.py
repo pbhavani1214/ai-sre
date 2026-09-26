@@ -51,7 +51,8 @@ def test_valid_csv_creates_a_run(runs):
         "primary_key_uniqueness", "unique_constraints", "check_constraints"]
     assert all(v["status"] == "PASSED" for v in body["validation_results"])
     assert body == {
-        "run_id": body["run_id"], "parent_run_id": None, "target_id": "customer", "target_table": "customer",
+        "run_id": body["run_id"], "parent_run_id": None, "database_id": "target", "target_id": "customer",
+        "target_table": "customer",
         "file_name": "customer.csv", "status": "SUCCEEDED", "created_at": body["created_at"],
         "completed_at": body["completed_at"],
         "summary": {"rows_received": 2, "checks_total": 7, "checks_passed": 7, "checks_failed": 0},

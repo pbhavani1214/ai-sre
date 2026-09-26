@@ -40,6 +40,9 @@ class RunRecord:
     status_history: list[str] = field(default_factory=list)  # every status the run has had
     schema: dict[str, Any] | None = None  # the target schema the run was validated against
     load_error: str | None = None  # the database error when the load failed
+    database_id: str = ""  # the database the target table belongs to (a retry inherits it)
+    database_name: str = ""  # its file name, for generated artifacts
+    target_snapshot: dict[str, Any] | None = None  # what the target held when the run was validated (AI evidence)
 
     def __post_init__(self):
         self.status_history.append(self.status)
@@ -55,6 +58,7 @@ class RunRecord:
         return {
             "run_id": self.run_id,
             "parent_run_id": self.parent_run_id,
+            "database_id": self.database_id,
             "target_id": self.target_id,
             "target_table": self.target_table,
             "file_name": self.file_name,
@@ -90,6 +94,10 @@ class RunStore:
     def get(self, run_id: str) -> RunRecord | None:
         with self._lock:
             return self._runs.get(run_id)
+
+    def all(self) -> list[RunRecord]:
+        with self._lock:
+            return list(self._runs.values())
 
     def __len__(self) -> int:
         with self._lock:

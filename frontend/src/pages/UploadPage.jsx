@@ -17,7 +17,7 @@ function Fact({ label, children }) {
   );
 }
 
-export default function UploadPage({ target, onBack, onCreated }) {
+export default function UploadPage({ database, target, onBack, onCreated }) {
   const [file, setFile] = useState(null);
   const [clientError, setClientError] = useState(null);
   const [serverError, setServerError] = useState(null);
@@ -41,7 +41,7 @@ export default function UploadPage({ target, onBack, onCreated }) {
     setSubmitting(true);
     setServerError(null);
     try {
-      const run = await createRun(target.target_id, file);
+      const run = await createRun(target.target_id, file, database?.database_id);
       onCreated(run);
     } catch (e) {
       setServerError(describeUploadError(e));
@@ -75,9 +75,12 @@ export default function UploadPage({ target, onBack, onCreated }) {
             <Title order={2} fz="lg">Target</Title>
           </Group>
           <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md">
+            <Fact label="Database">
+              {database ? database.display_name : databaseLabel(target.database_type)}
+              {database && <Text span size="xs" c="dimmed" ff="monospace"> ({database.file_name})</Text>}
+            </Fact>
             <Fact label="Target">{target.display_name}</Fact>
             <Fact label="Table"><Text span ff="monospace" size="sm">{target.table_name}</Text></Fact>
-            <Fact label="Database">{databaseLabel(target.database_type)}</Fact>
           </SimpleGrid>
         </Card>
 

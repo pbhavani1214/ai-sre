@@ -132,7 +132,7 @@ const FAILED_STATES = new Set(['FAILED_VALIDATION', 'LOAD_FAILED']);
 
 /** The run returned by POST /api/runs (or GET /api/runs/{run_id}), rendered from its status and results. */
 export default function RunResultPage({
-  run, target, investigation, onInvestigation, onRetried, onOpenRun, onUploadAnother, onChooseTarget,
+  run, target, database, investigation, onInvestigation, onRetried, onOpenRun, onUploadAnother, onChooseTarget,
 }) {
   const view = viewFor(run.status);
   const rows = run.summary?.rows_received;
@@ -163,6 +163,11 @@ export default function RunResultPage({
             <Fact label="Target">
               {target?.display_name ?? run.target_id}{' '}
               <Text span size="xs" c="dimmed" ff="monospace">({run.target_table})</Text>
+              {run.database_id && (
+                <Text size="xs" c="dimmed" data-testid="run-database">
+                  in {database?.database_id === run.database_id ? `${database.display_name} (${database.file_name})` : run.database_id}
+                </Text>
+              )}
             </Fact>
             <Fact label="File">{run.file_name}</Fact>
             <Fact label="Rows received">{typeof rows === 'number' ? rows.toLocaleString() : '–'}</Fact>
@@ -187,7 +192,8 @@ export default function RunResultPage({
         )}
 
         {FAILED_STATES.has(run.status) && onInvestigation && (
-          <RunInvestigationPanel runId={run.run_id} result={investigation} onResult={onInvestigation} />
+          <RunInvestigationPanel runId={run.run_id} fileName={run.file_name} result={investigation}
+            onResult={onInvestigation} onRetried={onRetried} />
         )}
         {FAILED_STATES.has(run.status) && onRetried && <RetryPanel runId={run.run_id} onRetried={onRetried} />}
 

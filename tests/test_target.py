@@ -1,4 +1,4 @@
-"""Milestone 1: SQLite target database, target registry and schema discovery (CONTRACT.md)."""
+"""Milestone 1: SQLite target database, target discovery and schema discovery (CONTRACT.md)."""
 
 import sqlite3
 from contextlib import closing
@@ -106,12 +106,12 @@ def test_unknown_table_raises(db):
 
 # --- API ---------------------------------------------------------------------------------------
 
-def test_list_targets():
+def test_list_targets(db):
     r = client.get("/api/targets")
     assert r.status_code == 200
     assert r.json() == {"targets": [{
         "target_id": "customer", "table_name": "customer", "display_name": "Customer",
-        "description": "Customer master data", "database_type": "sqlite"}]}
+        "description": "Customer master data", "database_type": "sqlite", "database_id": "target"}]}
 
 
 def test_target_schema_columns(db):

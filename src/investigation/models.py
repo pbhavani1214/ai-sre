@@ -11,6 +11,9 @@ REQUIRED_KEYS = (
     "summary", "observed_facts", "hypotheses", "root_cause", "root_cause_evidence",
     "root_cause_reasoning", "recommended_fix", "regression_test",
 )
+# Upload runs: the regression test is generated from the target schema instead. The AI's cause_groups, row_fixes and
+# prevention are requested but optional, so a model that omits them still gives a usable investigation.
+RUN_REQUIRED_KEYS = tuple(k for k in REQUIRED_KEYS if k != "regression_test")
 
 
 class InvestigationParseError(ValueError):
@@ -71,6 +74,91 @@ class RegressionTest:
         raise InvestigationParseError("'regression_test' must be a non-empty string or an object with 'code'")
 
 
+FIX_ACTIONS = ("REPLACE", "DELETE_ROW", "NEEDS_DECISION")
+CONFIDENCE_LEVELS = ("HIGH", "MEDIUM", "LOW")
+
+
+def _optional_list(d: dict[str, Any], key: str) -> list[Any]:
+    v = d.get(key, [])
+    if v is None:
+        return []
+    if not isinstance(v, list):
+        raise InvestigationParseError(f"'{key}' must be a list")
+    return v
+
+
+@dataclass
+class CauseGroup:
+    """Failures grouped by their likely origin (upload runs only)."""
+    title: str
+    category: str
+    explanation: str
+    checks: list[str] = field(default_factory=list)
+    rows: list[int] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: Any, i: int = 0) -> "CauseGroup":
+        where = f"cause_groups[{i}]."
+        if not isinstance(d, dict):
+            raise InvestigationParseError(f"'cause_groups[{i}]' must be an object")
+        rows = d.get("rows") or []
+        if not isinstance(rows, list):
+            raise InvestigationParseError(f"'{where}rows' must be a list of row numbers")
+        return cls(
+            title=_text(d, "title", where),
+            category=str(d.get("category") or "OTHER").strip().upper(),
+            explanation=_text(d, "explanation", where),
+            checks=_text_list(d, "checks", where) if d.get("checks") is not None else [],
+            rows=[int(r) for r in rows if str(r).strip().lstrip("+-").isdigit()],
+            evidence=_text_list(d, "evidence", where) if d.get("evidence") is not None else [],
+        )
+
+
+@dataclass
+class RowFix:
+    """One suggested correction to the uploaded file (upload runs only). Never applied automatically."""
+    row: int
+    column: str | None
+    action: str  # one of FIX_ACTIONS
+    current_value: str | None
+    suggested_value: str | None
+    reason: str
+    confidence: str  # one of CONFIDENCE_LEVELS
+    evidence: str = ""
+    satisfies_constraints: bool = False  # set by the backend after checking the suggestion
+
+    @classmethod
+    def from_dict(cls, d: Any, i: int = 0) -> "RowFix":
+        where = f"row_fixes[{i}]."
+        if not isinstance(d, dict):
+            raise InvestigationParseError(f"'row_fixes[{i}]' must be an object")
+        try:
+            row = int(d.get("row"))
+        except (TypeError, ValueError):
+            raise InvestigationParseError(f"'{where}row' must be a row number") from None
+        action = str(d.get("action") or "").strip().upper()
+        if action not in FIX_ACTIONS:
+            raise InvestigationParseError(f"'{where}action' is {d.get('action')!r}; expected one of {', '.join(FIX_ACTIONS)}")
+        confidence = str(d.get("confidence") or "LOW").strip().upper()
+        if confidence not in CONFIDENCE_LEVELS:
+            confidence = "LOW"
+        suggested = d.get("suggested_value")
+        if action == "REPLACE" and suggested is None:
+            raise InvestigationParseError(f"'{where}suggested_value' is required for REPLACE")
+        column = d.get("column")
+        return cls(
+            row=row,
+            column=str(column) if column not in (None, "") else None,
+            action=action,
+            current_value=None if d.get("current_value") is None else str(d["current_value"]),
+            suggested_value=None if suggested is None or action != "REPLACE" else str(suggested),
+            reason=_text(d, "reason", where),
+            confidence=confidence,
+            evidence=str(d.get("evidence") or "").strip(),
+        )
+
+
 @dataclass
 class TraceStep:
     stage: str
@@ -92,12 +180,18 @@ class InvestigationResult:
     investigation_trace: list[TraceStep] = field(default_factory=list)
     evidence_warnings: list[str] = field(default_factory=list)
     raw_response: str = ""
+    # Upload runs only (src/runs/service.py); empty for the pipeline investigation:
+    cause_groups: list[CauseGroup] = field(default_factory=list)
+    row_fixes: list[RowFix] = field(default_factory=list)
+    prevention: list[str] = field(default_factory=list)
+    model: str = ""  # the model that produced the result
 
     @classmethod
-    def from_dict(cls, d: Any, raw_response: str = "") -> "InvestigationResult":
+    def from_dict(cls, d: Any, raw_response: str = "",
+                  required: tuple[str, ...] = REQUIRED_KEYS) -> "InvestigationResult":
         if not isinstance(d, dict):
             raise InvestigationParseError("LLM output must be a JSON object")
-        missing = [k for k in REQUIRED_KEYS if k not in d]
+        missing = [k for k in required if k not in d]
         if missing:
             raise InvestigationParseError(f"LLM output missing required keys: {missing}")
         if not isinstance(d["hypotheses"], list) or not d["hypotheses"]:
@@ -117,8 +211,12 @@ class InvestigationResult:
             root_cause_evidence=_text_list(d, "root_cause_evidence"),
             root_cause_reasoning=_text(d, "root_cause_reasoning"),
             recommended_fix=_text(d, "recommended_fix"),
-            regression_test=RegressionTest.from_dict(d["regression_test"]),
+            regression_test=(RegressionTest.from_dict(d["regression_test"]) if "regression_test" in d
+                             else RegressionTest(name="regression_test", description="", code="")),
             raw_response=raw_response,
+            cause_groups=[CauseGroup.from_dict(g, i) for i, g in enumerate(_optional_list(d, "cause_groups"))],
+            row_fixes=[RowFix.from_dict(f, i) for i, f in enumerate(_optional_list(d, "row_fixes"))],
+            prevention=[str(p).strip() for p in _optional_list(d, "prevention") if str(p).strip()],
         )
 
     def to_dict(self) -> dict[str, Any]:
