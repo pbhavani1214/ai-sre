@@ -96,8 +96,40 @@ def investigate(
     """Run validations (if not supplied), send all evidence to the LLM, return a structured result."""
     if validation_results is None:
         validation_results = run_all_validations(source, target)
-    provider = provider or get_provider()
     context = build_context(pipeline_description, source, target, validation_results, execution_evidence)
+    return _ask_llm(context, provider)
+
+
+def investigate_pipeline(
+    pipeline_name: str,
+    pipeline_description: str,
+    execution_summary: dict[str, Any],
+    validation_results: list[dict[str, Any]],
+    use_demo_data: bool = False,
+    provider: LLMProvider | None = None,
+) -> InvestigationResult:
+    """Investigate from caller-supplied evidence (JSON-friendly; used by the API).
+
+    If use_demo_data is True, the bundled scenario data is also profiled, the deterministic
+    validation tools are run on it, and its pipeline run log is added as execution evidence.
+    """
+    context: dict[str, Any] = {
+        "pipeline_name": pipeline_name,
+        "pipeline_description": pipeline_description,
+        "execution_evidence": {"execution_summary": execution_summary},
+        "validation_results": list(validation_results),
+    }
+    if use_demo_data:
+        source, target, run = load_scenario()
+        context["source"] = _profile(source)
+        context["target"] = _profile(target)
+        context["execution_evidence"]["pipeline_run"] = run
+        context["validation_results"] += [v.to_dict() for v in run_all_validations(source, target)]
+    return _ask_llm(context, provider)
+
+
+def _ask_llm(context: dict[str, Any], provider: LLMProvider | None) -> InvestigationResult:
+    provider = provider or get_provider()
     raw = provider.complete(SYSTEM_PROMPT, build_user_prompt(context))
     return InvestigationResult.from_dict(parse_llm_json(raw), raw_response=raw)
 
