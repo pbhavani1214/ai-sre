@@ -8,7 +8,7 @@ from typing import Callable
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.ai.provider import LLMError, LLMProvider, get_provider
+from src.ai.provider import LLMError, LLMProvider, LLMTimeoutError, get_provider
 from src.api.schemas import DemoScenarioResponse, HealthResponse, InvestigateRequest, InvestigateResponse
 from src.config import cors_origins
 from src.investigation.models import InvestigationParseError
@@ -71,7 +71,13 @@ def investigate(
     except InvestigationParseError as e:
         log.warning("Unparseable LLM output: %s", e)
         raise HTTPException(status_code=502, detail=f"LLM returned an invalid investigation: {e}") from e
+    except LLMTimeoutError as e:
+        log.warning("LLM timed out: %s", e)
+        raise HTTPException(status_code=504, detail=f"LLM provider timed out: {e}") from e
     except LLMError as e:
         log.warning("LLM call failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"LLM call failed: {e}") from e
+        raise HTTPException(status_code=502, detail=f"LLM provider unavailable: {e}") from e
+    except Exception as e:  # never leak a stack trace to the frontend
+        log.exception("Investigation failed unexpectedly")
+        raise HTTPException(status_code=500, detail="Investigation failed due to an internal error.") from e
     return InvestigateResponse.from_result(result)

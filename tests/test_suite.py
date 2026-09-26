@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from src.api.main import app, get_llm_provider
 from src.data.scenario import build_source, load_scenario, simulate_pipeline
 from src.validation import suite
+from tests.llm_stub import valid_llm_output
 from src.validation.suite import (
     MAX_EVIDENCE,
     check_duplicate_customer_id,
@@ -192,8 +193,7 @@ def test_demo_results_can_be_posted_to_investigate():
     class Stub:
         def complete(self, system, user):
             prompts.append(user)
-            return json.dumps({"summary": "s", "hypotheses": [], "evidence": [], "root_cause": "r",
-                               "recommended_fix": "f", "regression_test": "t"})
+            return json.dumps(valid_llm_output())
 
     app.dependency_overrides[get_llm_provider] = lambda: (lambda: Stub())
     try:
@@ -220,8 +220,7 @@ class RecordingStub:
 
     def complete(self, system, user):
         self.prompts.append(user)
-        return json.dumps({"summary": "s", "hypotheses": [], "evidence": [], "root_cause": "r",
-                           "recommended_fix": "f", "regression_test": "t"})
+        return json.dumps(valid_llm_output())
 
 
 def _investigate_ctx(req):

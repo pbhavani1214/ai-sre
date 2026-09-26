@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.main import app, get_llm_provider
+from tests.llm_stub import valid_llm_output
 
 VALID_REQUEST = {
     "pipeline_name": "Customer Data Pipeline",
@@ -16,18 +17,7 @@ VALID_REQUEST = {
     ],
 }
 
-STUB_LLM_OUTPUT = {
-    "summary": "stub summary",
-    "hypotheses": [
-        {"statement": "h1", "status": "confirmed", "confidence": 0.9, "supporting_evidence": ["e1"]},
-        {"statement": "h2", "status": "rejected", "confidence": 0.1, "contradicting_evidence": ["e2"]},
-        {"statement": "h3", "status": "weird-value", "confidence": 0.5},
-    ],
-    "evidence": [{"source": "validation", "observation": "obs"}],
-    "root_cause": "stub root cause",
-    "recommended_fix": "stub fix",
-    "regression_test": {"name": "test_x", "description": "desc", "code": "def test_x(): pass"},
-}
+STUB_LLM_OUTPUT = valid_llm_output()
 
 
 class StubProvider:
@@ -64,10 +54,11 @@ def test_investigate_returns_contract_shape(stub):
     r = client.post("/api/investigate", json=VALID_REQUEST)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert set(body) == {"summary", "hypotheses", "root_cause", "evidence", "recommended_fix", "regression_test"}
-    assert [h["status"] for h in body["hypotheses"]] == ["supported", "rejected", "inconclusive"]
-    assert set(body["hypotheses"][0]) == {"hypothesis", "evidence", "status"}
-    assert body["evidence"] == ["validation: obs"]
+    # Original contract fields are all still present (new fields are additive).
+    assert {"summary", "hypotheses", "root_cause", "evidence", "recommended_fix", "regression_test"} <= set(body)
+    assert [h["status"] for h in body["hypotheses"]] == ["SUPPORTED", "REJECTED", "INCONCLUSIVE"]
+    assert {"hypothesis", "evidence", "status"} <= set(body["hypotheses"][0])
+    assert body["evidence"] == body["observed_facts"] == STUB_LLM_OUTPUT["observed_facts"]
     assert "def test_x" in body["regression_test"]
 
     # The request's evidence reached the LLM prompt.
