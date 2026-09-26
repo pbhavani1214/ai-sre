@@ -99,6 +99,34 @@ export async function createRun(targetId, file) {
   return request('/api/runs', { method: 'POST', body: form });
 }
 
+/** GET /api/runs/{run_id}: the stored RunSummary (used to show a retry's parent run). */
+export async function getRun(runId) {
+  requireBackend();
+  return request(`/api/runs/${encodeURIComponent(runId)}`);
+}
+
+/**
+ * POST /api/runs/{run_id}/investigate: run-scoped AI investigation. No body; the backend builds the evidence
+ * from the stored run.
+ * @returns {Promise<import('../types').RunInvestigation>}
+ */
+export async function investigateRun(runId) {
+  requireBackend();
+  return request(`/api/runs/${encodeURIComponent(runId)}/investigate`, { method: 'POST' });
+}
+
+/**
+ * POST /api/runs/{run_id}/retry: a NEW run from a corrected CSV, linked by parent_run_id. The original run is
+ * left unchanged. Sends exactly one field, `file`.
+ * @returns {Promise<import('../types').RunSummary>}
+ */
+export async function retryRun(runId, file) {
+  requireBackend();
+  const form = new FormData();
+  form.append('file', file);
+  return request(`/api/runs/${encodeURIComponent(runId)}/retry`, { method: 'POST', body: form });
+}
+
 /**
  * The demo run: the deterministic validation state plus the raw run record and datasets.
  * @returns {Promise<import('../types').Scenario>}

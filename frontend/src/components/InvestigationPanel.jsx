@@ -80,15 +80,24 @@ function Running({ elapsed, validations }) {
   );
 }
 
-function downloadJson(result) {
+export function downloadJson(result, fileName = 'investigation.json') {
   const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: 'investigation.json' });
+  const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
   a.click();
   URL.revokeObjectURL(url);
 }
 
-function Result({ result }) {
+/**
+ * An InvestigateResponse (demo and run-scoped investigations share the shape). With `reasoningOpen`, the root-cause
+ * reasoning and evidence are shown directly instead of behind "Why?".
+ */
+export function InvestigationResult({ result: raw, reasoningOpen = false }) {
+  const result = {
+    ...raw,
+    hypotheses: raw.hypotheses ?? [], observed_facts: raw.observed_facts ?? [], root_cause_evidence: raw.root_cause_evidence ?? [],
+    investigation_trace: raw.investigation_trace ?? [], evidence_warnings: raw.evidence_warnings ?? [],
+  };
   const supported = result.hypotheses.filter((h) => h.status === 'SUPPORTED').length;
   const identified = result.root_cause_status === 'IDENTIFIED';
   return (
@@ -113,12 +122,25 @@ function Result({ result }) {
             </Badge>
           </Group>
           <Text size="sm" style={{ whiteSpace: 'pre-line' }}>{result.root_cause}</Text>
-          <Spoiler maxHeight={0} showLabel="Why?" hideLabel="Hide reasoning" mt="xs">
-            <Stack gap="sm" pt={4}>
-              <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-line' }}>{result.root_cause_reasoning}</Text>
-              <CitedList items={result.root_cause_evidence} />
+          {reasoningOpen ? (
+            <Stack gap="sm" mt="sm">
+              <div>
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" mb={4}>Root cause reasoning</Text>
+                <Text size="sm" style={{ whiteSpace: 'pre-line' }}>{result.root_cause_reasoning}</Text>
+              </div>
+              <div>
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed" mb={4}>Root cause evidence</Text>
+                <CitedList items={result.root_cause_evidence} />
+              </div>
             </Stack>
-          </Spoiler>
+          ) : (
+            <Spoiler maxHeight={0} showLabel="Why?" hideLabel="Hide reasoning" mt="xs">
+              <Stack gap="sm" pt={4}>
+                <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-line' }}>{result.root_cause_reasoning}</Text>
+                <CitedList items={result.root_cause_evidence} />
+              </Stack>
+            </Spoiler>
+          )}
         </Paper>
         <Paper withBorder p="md" radius="md" style={{ borderLeft: '4px solid var(--mantine-color-green-6)' }}>
           <Group gap="xs" mb="xs">
@@ -203,7 +225,7 @@ export default function InvestigationPanel({ status, result, error, elapsed, val
           </Button>
         </Alert>
       )}
-      {status === 'done' && result && <Result result={result} />}
+      {status === 'done' && result && <InvestigationResult result={result} />}
     </Card>
   );
 }

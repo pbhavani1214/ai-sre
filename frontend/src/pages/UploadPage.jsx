@@ -5,17 +5,8 @@ import {
 import { IconAlertTriangle, IconArrowLeft, IconDatabase, IconPlayerPlay } from '@tabler/icons-react';
 import CsvDrop, { checkCsvFile } from '../components/CsvDrop';
 import { createRun } from '../services/api';
+import { describeUploadError } from '../services/errors';
 import { databaseLabel } from '../utils';
-
-// Backend errors about the uploaded file itself (CONTRACT.md §30). Shown under the drop area.
-const FILE_ERROR_TITLE = {
-  unsupported_file_type: 'Unsupported file type',
-  malformed_csv: 'The CSV could not be read',
-  empty_file: 'The file is empty',
-  missing_header: 'The CSV has no header row',
-  file_too_large: 'The file is too large',
-  invalid_file: 'The file was rejected',
-};
 
 function Fact({ label, children }) {
   return (
@@ -24,20 +15,6 @@ function Fact({ label, children }) {
       <Text size="sm" fw={500} style={{ overflowWrap: 'anywhere' }}>{children}</Text>
     </div>
   );
-}
-
-/** Where a failed POST /api/runs is shown: under the file, or in an alert above the form. */
-function describeError(error) {
-  if (FILE_ERROR_TITLE[error.code] || error.field === 'file') {
-    return { slot: 'file', title: FILE_ERROR_TITLE[error.code] ?? 'The file was rejected', message: error.message };
-  }
-  if (error.code === 'target_not_found') {
-    return { slot: 'form', kind: 'target', title: 'This target is no longer available', message: error.message };
-  }
-  if (error.code === 'network_error' || error.code === 'backend_not_configured') {
-    return { slot: 'form', title: 'Could not reach the backend', message: error.message };
-  }
-  return { slot: 'form', title: 'The run could not be created', message: error.message };
 }
 
 export default function UploadPage({ target, onBack, onCreated }) {
@@ -67,14 +44,16 @@ export default function UploadPage({ target, onBack, onCreated }) {
       const run = await createRun(target.target_id, file);
       onCreated(run);
     } catch (e) {
-      setServerError(describeError(e));
+      setServerError(describeUploadError(e));
       inFlight.current = false;
       setSubmitting(false);
     }
   };
 
   const fileError = clientError
-    ?? (serverError?.slot === 'file' ? <><Text span fw={600}>{serverError.title}.</Text> {serverError.message}</> : null);
+    ?? (serverError?.slot === 'file'
+      ? <><Text span fw={600}>{serverError.title}.</Text>{serverError.message && <> {serverError.message}</>}</>
+      : null);
 
   return (
     <Container size="md" py="xl">
@@ -104,7 +83,7 @@ export default function UploadPage({ target, onBack, onCreated }) {
 
         {serverError?.slot === 'form' && (
           <Alert color="red" variant="light" icon={<IconAlertTriangle />} title={serverError.title} role="alert">
-            <Text size="sm">{serverError.message}</Text>
+            {serverError.message && <Text size="sm">{serverError.message}</Text>}
             {serverError.kind === 'target' && (
               <Button mt="sm" size="xs" color="red" variant="light" onClick={onBack}>Choose another target</Button>
             )}

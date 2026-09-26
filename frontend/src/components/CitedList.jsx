@@ -5,12 +5,12 @@ import { parseCited } from '../utils';
 export default function CitedList({ items, empty = 'No evidence cited.' }) {
   if (!items?.length) return <Text size="sm" c="dimmed">{empty}</Text>;
   return (
-    <List spacing={6} size="sm">
+    <List spacing={6} size="sm" style={{ minWidth: 0 }} styles={{ itemWrapper: { minWidth: 0 }, itemLabel: { minWidth: 0 } }}>
       {items.map((line, i) => {
         const { id, text } = parseCited(line);
         return (
-          <List.Item key={i}>
-            {id && <Code mr={6}>{id}</Code>}
+          <List.Item key={i} style={{ overflowWrap: 'anywhere' }}>
+            {id && <Code mr={6} style={{ overflowWrap: 'anywhere', whiteSpace: 'normal' }}>{id}</Code>}
             {text}
           </List.Item>
         );
