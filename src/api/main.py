@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
+from contextlib import closing
 from typing import Callable
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.ai.provider import LLMError, LLMProvider, LLMTimeoutError, get_provider
 from src.api.schemas import (
     DemoRunResponse, DemoScenarioResponse, HealthResponse, InvestigateRequest, InvestigateResponse,
+    RunSummary, TargetListResponse, TargetSchemaResponse,
 )
-from src.config import cors_origins
+from src.config import cors_origins, target_db_path
 from src.investigation.models import InvestigationParseError
 from src.investigation.service import investigate_pipeline
+from src.runs.ingest import UploadError, check_file_type, parse_csv, read_limited
+from src.runs.store import RunRecord, RunStore, new_run_id, store
+from src.target.database import initialize_database
+from src.target.discovery import discover_schema
+from src.target.registry import TARGETS, get_target
 from src.validation.suite import get_demo_run, get_demo_scenario
 
 log = logging.getLogger(__name__)
@@ -89,3 +97,69 @@ def investigate(
         log.exception("Investigation failed unexpectedly")
         raise HTTPException(status_code=500, detail="Investigation failed due to an internal error.") from e
     return InvestigateResponse.from_result(result)
+
+
+# --- targets ---------------------------------------------------------------------------------
+# New (non-demo) endpoints report errors as detail = {"code", "message", "field"}.
+
+def get_target_db() -> str:
+    """FastAPI dependency: path of the SQLite target database, created and seeded if missing."""
+    return str(initialize_database(target_db_path()))
+
+
+def api_error(status_code: int, code: str, message: str, field: str | None = None) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"code": code, "message": message, "field": field})
+
+
+@app.get("/api/targets", response_model=TargetListResponse)
+def list_targets() -> dict:
+    """The target tables a file can be loaded into (identification only, no schema)."""
+    return {"targets": [t.to_dict() for t in TARGETS.values()]}
+
+
+@app.get("/api/targets/{target_id}", response_model=TargetSchemaResponse, response_model_exclude_none=True)
+def target_schema(target_id: str, db: str = Depends(get_target_db)) -> dict:
+    """The target's columns and constraints, discovered from the SQLite database."""
+    target = get_target(target_id)
+    if target is None:
+        raise api_error(404, "target_not_found", f"Target '{target_id}' was not found.", "target_id")
+    with closing(sqlite3.connect(db)) as conn:
+        schema = discover_schema(conn, target.table_name)
+    return {"target_id": target.target_id, "table_name": target.table_name,
+            "database_type": target.database_type, **schema}
+
+
+# --- runs ------------------------------------------------------------------------------------
+
+def get_run_store() -> RunStore:
+    """FastAPI dependency: the in-memory run store. Tests override it."""
+    return store
+
+
+@app.post("/api/runs", response_model=RunSummary, status_code=201)
+def create_run(
+    target_id: str = Form(...),
+    file: UploadFile = File(...),
+    runs: RunStore = Depends(get_run_store),
+) -> dict:
+    """Upload one CSV for a target and create a run. A file that can't be read creates no run."""
+    target = get_target(target_id)
+    if target is None:
+        raise api_error(404, "target_not_found", f"Target '{target_id}' was not found.", "target_id")
+    try:
+        check_file_type(file.filename)
+        upload = parse_csv(read_limited(file.file))
+    except UploadError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail()) from e
+    record = RunRecord(run_id=new_run_id(), target_id=target.target_id, target_table=target.table_name,
+                       file_name=file.filename, upload=upload)
+    runs.add(record)
+    return record.to_summary()
+
+
+@app.get("/api/runs/{run_id}", response_model=RunSummary)
+def get_run(run_id: str, runs: RunStore = Depends(get_run_store)) -> dict:
+    record = runs.get(run_id)
+    if record is None:
+        raise api_error(404, "run_not_found", f"Run '{run_id}' was not found.", "run_id")
+    return record.to_summary()

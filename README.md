@@ -42,7 +42,9 @@ missing, but 5 duplicate rows hide the gap.
 | `src/investigation/models.py` | Structured result: summary, hypotheses, evidence, root cause, fix, regression test |
 | `src/investigation/service.py` | Builds the evidence, sends it to the LLM, parses structured JSON output |
 | `tests/test_validation.py` | Proves the validation tools work, plus the investigation wiring (stub LLM) |
-| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate` |
+| `src/target/` | SQLite target database (`database.py`, seeded `customer` table; `python -m src.target.database [--reset]`), target registry (`registry.py`) and schema discovery from SQLite (`discovery.py`) |
+| `src/runs/` | Upload runs: CSV envelope checks (`ingest.py`) and the in-memory run store, latest 20 runs (`store.py`) |
+| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate`, `/api/targets`, `/api/targets/{target_id}`, `POST /api/runs`, `GET /api/runs/{run_id}` |
 | `frontend/` | React + Vite + Mantine UI (see `frontend/README.md`) |
 | `example_usage.py` | How another module calls the investigation service |
 
