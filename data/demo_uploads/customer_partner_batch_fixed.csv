@@ -1,0 +1,11 @@
+customer_id,name,email,country,signup_date,status
+1201,Aarav Mehta,aarav.mehta@example.com,IN,2024-05-02,ACTIVE
+1202,Beatriz Silva,beatriz.silva@example.com,BR,2024-05-03,ACTIVE
+1203,Chen Wei,chen.wei@example.com,SG,2024-05-04,INACTIVE
+1204,Dana Kowalski,dana.kowalski@example.com,PL,2024-05-06,ACTIVE
+1206,Elif Demir,elif.demir@example.com,TR,2024-05-08,CHURNED
+1207,Farid Haddad,farid.haddad@example.com,AE,2024-05-09,ACTIVE
+1208,Grace Okoye,grace.okoye@example.com,NG,2024-05-11,ACTIVE
+1209,Hiro Tanaka,hiro.tanaka@example.com,JP,2024-05-12,INACTIVE
+1210,Isla Murray,isla.murray@example.com,GB,2024-05-14,ACTIVE
+1211,Jonas Berg,jonas.berg@example.com,SE,2024-05-15,ACTIVE

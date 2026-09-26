@@ -1,0 +1,6 @@
+customer_id,name,email,country,signup_date,status
+1101,Maya Fernandes,maya.fernandes@example.com,IN,2024-04-02,ACTIVE
+1102,Liam O'Connor,liam.oconnor@example.com,IE,2024-04-05,ACTIVE
+1103,Sofia Rossi,sofia.rossi@example.com,IT,2024-04-09,INACTIVE
+1104,Noah Kim,noah.kim@example.com,KR,2024-04-12,ACTIVE
+1105,Zara Ahmed,zara.ahmed@example.com,AE,2024-04-16,CHURNED
