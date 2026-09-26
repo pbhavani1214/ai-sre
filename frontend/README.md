@@ -51,7 +51,8 @@ src/
 
 ## Backend contract
 
-`docs/implementation/CONTRACT.md` is the source of truth. Endpoints used:
+The backend's API is described in the root README ("API reference") and, while the backend runs, at
+http://localhost:8000/docs. Endpoints used:
 
 | Method | Path | Used for |
 |---|---|---|
