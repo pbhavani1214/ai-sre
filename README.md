@@ -42,6 +42,8 @@ missing, but 5 duplicate rows hide the gap.
 | `src/investigation/models.py` | Structured result: summary, hypotheses, evidence, root cause, fix, regression test |
 | `src/investigation/service.py` | Builds the evidence, sends it to the LLM, parses structured JSON output |
 | `tests/test_validation.py` | Proves the validation tools work, plus the investigation wiring (stub LLM) |
+| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate` |
+| `frontend/` | React + Vite + Mantine UI (see `frontend/README.md`) |
 | `example_usage.py` | How another module calls the investigation service |
 
 ### Run
@@ -56,6 +58,28 @@ LLM_API_KEY=...
 LLM_MODEL=...            # optional
 python example_usage.py
 ```
+
+### Run the full app locally (backend + frontend)
+
+Needs Python 3.11+ and Node 20+. Use two terminals.
+
+```bash
+# Terminal 1: backend on http://localhost:8000 (API docs at /docs)
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env                                  # then set LLM_API_KEY
+uvicorn src.api.main:app --reload --env-file .env
+
+# Terminal 2: frontend on http://localhost:5173
+cd frontend
+npm install
+cp .env.example .env                                  # VITE_API_BASE_URL=http://localhost:8000
+npm run dev
+```
+
+Open http://localhost:5173. The header badge should read **Backend connected**. Without `LLM_API_KEY` it reads
+**AI not configured**: the evidence still loads, but "Investigate with AI" returns an error. The backend only
+accepts browser calls from the origins in `CORS_ORIGINS` (the Vite dev server by default).
 
 ## Intended architecture (React + FastAPI)
 

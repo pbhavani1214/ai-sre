@@ -1,35 +1,14 @@
-import { Accordion, Badge, Group, Stack, Table, Text, ThemeIcon } from '@mantine/core';
+import { Accordion, Badge, Group, List, Stack, Text, ThemeIcon } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
-import { humanize } from '../utils';
+import { humanize, isFailed } from '../utils';
 
-function RowsTable({ rows }) {
-  if (!rows.length) return null;
-  const cols = Object.keys(rows[0]);
-  return (
-    <Table.ScrollContainer minWidth={500}>
-      <Table withTableBorder fz="xs" verticalSpacing={4}>
-        <Table.Thead>
-          <Table.Tr>{cols.map((c) => <Table.Th key={c}>{c}</Table.Th>)}</Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.map((r, i) => (
-            <Table.Tr key={i}>
-              {cols.map((c) => (
-                <Table.Td key={c}>{r[c] ?? <Text span c="red" size="xs" fs="italic">null</Text>}</Table.Td>
-              ))}
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    </Table.ScrollContainer>
-  );
-}
+const SEVERITY_COLOR = { HIGH: 'red', MEDIUM: 'orange', LOW: 'yellow' };
+const SEVERITY_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
-/** Renders a ValidationResult.details object generically: scalars, id->count maps and row lists. */
-function Details({ details }) {
-  const scalars = Object.entries(details).filter(([, v]) => typeof v !== 'object' || v === null);
-  const maps = Object.entries(details).filter(([, v]) => v && typeof v === 'object' && !Array.isArray(v));
-  const lists = Object.entries(details).filter(([, v]) => Array.isArray(v));
+/** Renders CheckResult.metrics generically: scalars as numbers, value -> count maps as badges. */
+function Metrics({ metrics }) {
+  const scalars = Object.entries(metrics).filter(([, v]) => typeof v !== 'object' || v === null);
+  const maps = Object.entries(metrics).filter(([, v]) => v && typeof v === 'object' && !Array.isArray(v));
   return (
     <Stack gap="sm">
       {scalars.length > 0 && (
@@ -52,44 +31,56 @@ function Details({ details }) {
           </Group>
         </div>
       ))}
-      {lists.map(([k, v]) => (
-        <div key={k}>
-          <Text size="xs" c="dimmed" mb={4}>{humanize(k)}</Text>
-          <RowsTable rows={v} />
-        </div>
-      ))}
     </Stack>
   );
 }
 
 export default function ValidationChecks({ validations }) {
-  const sorted = [...validations].sort((a, b) => Number(a.passed) - Number(b.passed));
+  const sorted = [...validations].sort(
+    (a, b) => Number(isFailed(b)) - Number(isFailed(a)) || SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
+  );
   return (
     <Accordion variant="separated" radius="md" multiple>
-      {sorted.map((v) => (
-        <Accordion.Item key={v.check} value={v.check}>
-          <Accordion.Control
-            icon={
-              <ThemeIcon color={v.passed ? 'green' : 'red'} variant="light" radius="xl" size={26}>
-                {v.passed ? <IconCheck size={16} /> : <IconX size={16} />}
-              </ThemeIcon>
-            }
-          >
-            <Group justify="space-between" wrap="nowrap" gap="sm">
-              <div>
-                <Text size="sm" fw={600}>{humanize(v.check)}</Text>
-                <Text size="xs" c="dimmed">{v.summary}</Text>
-              </div>
-              <Badge color={v.passed ? 'green' : 'red'} variant="light" visibleFrom="xs" style={{ flexShrink: 0 }}>
-                {v.passed ? 'Passed' : 'Failed'}
-              </Badge>
-            </Group>
-          </Accordion.Control>
-          <Accordion.Panel>
-            <Details details={v.details} />
-          </Accordion.Panel>
-        </Accordion.Item>
-      ))}
+      {sorted.map((v) => {
+        const failed = isFailed(v);
+        return (
+          <Accordion.Item key={v.name} value={v.name}>
+            <Accordion.Control
+              icon={
+                <ThemeIcon color={failed ? 'red' : 'green'} variant="light" radius="xl" size={26}>
+                  {failed ? <IconX size={16} /> : <IconCheck size={16} />}
+                </ThemeIcon>
+              }
+            >
+              <Group justify="space-between" wrap="nowrap" gap="sm">
+                <div>
+                  <Text size="sm" fw={600}>{humanize(v.name)}</Text>
+                  <Text size="xs" c="dimmed">{v.summary}</Text>
+                </div>
+                <Group gap={6} wrap="nowrap" visibleFrom="xs" style={{ flexShrink: 0 }}>
+                  {failed && (
+                    <Badge color={SEVERITY_COLOR[v.severity] ?? 'gray'} variant="outline">{v.severity}</Badge>
+                  )}
+                  <Badge color={failed ? 'red' : 'green'} variant="light">{failed ? 'Failed' : 'Passed'}</Badge>
+                </Group>
+              </Group>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <Stack gap="md">
+                <Metrics metrics={v.metrics} />
+                {v.evidence.length > 0 && (
+                  <div>
+                    <Text size="xs" c="dimmed" mb={4}>Evidence</Text>
+                    <List size="sm" spacing={4}>
+                      {v.evidence.map((e, i) => <List.Item key={i}>{e}</List.Item>)}
+                    </List>
+                  </div>
+                )}
+              </Stack>
+            </Accordion.Panel>
+          </Accordion.Item>
+        );
+      })}
     </Accordion>
   );
 }

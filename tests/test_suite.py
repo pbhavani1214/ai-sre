@@ -186,6 +186,19 @@ def test_demo_scenario_endpoint_is_deterministic(llm_forbidden):
     assert client.get("/api/demo/scenario").json() == client.get("/api/demo/scenario").json()
 
 
+def test_demo_run_endpoint(llm_forbidden):
+    r = client.get("/api/demo/run")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert set(body) == {"pipeline_run", "source", "target"}
+    source, target, run = load_scenario()
+    assert body["pipeline_run"] == run
+    assert len(body["source"]) == len(source) and len(body["target"]) == len(target)
+    assert set(body["target"][0]) == set(target.columns)
+    # Missing values are JSON null (not NaN), so the null customer_id survives the round trip.
+    assert sum(row["customer_id"] is None for row in body["target"]) == int(target["customer_id"].isna().sum()) == 1
+
+
 def test_demo_results_can_be_posted_to_investigate():
     """UI flow: GET scenario, then POST its results unchanged to /api/investigate."""
     prompts = []

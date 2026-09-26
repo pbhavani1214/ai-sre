@@ -9,11 +9,13 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.ai.provider import LLMError, LLMProvider, LLMTimeoutError, get_provider
-from src.api.schemas import DemoScenarioResponse, HealthResponse, InvestigateRequest, InvestigateResponse
+from src.api.schemas import (
+    DemoRunResponse, DemoScenarioResponse, HealthResponse, InvestigateRequest, InvestigateResponse,
+)
 from src.config import cors_origins
 from src.investigation.models import InvestigationParseError
 from src.investigation.service import investigate_pipeline
-from src.validation.suite import get_demo_scenario
+from src.validation.suite import get_demo_run, get_demo_scenario
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,12 @@ def health() -> HealthResponse:
 def demo_scenario() -> dict:
     """Deterministic demo state (real validation suite on bundled data). Never calls the LLM."""
     return get_demo_scenario()
+
+
+@app.get("/api/demo/run", response_model=DemoRunResponse)
+def demo_run() -> dict:
+    """Raw demo inputs (pipeline run record, source and target rows) for the UI. Never calls the LLM."""
+    return get_demo_run()
 
 
 @app.post("/api/investigate", response_model=InvestigateResponse)

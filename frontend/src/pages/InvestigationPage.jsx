@@ -13,7 +13,7 @@ export default function InvestigationPage() {
   const panelRef = useRef(null);
 
   const startInvestigation = () => {
-    investigation.start();
+    investigation.start(scenario.data);
     panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -45,9 +45,7 @@ export default function InvestigationPage() {
     <Container size="lg" py="md">
       <Stack gap="lg">
         <RunOverview
-          run={data.pipeline_run}
-          description={data.pipeline_description}
-          validations={data.validation_results}
+          scenario={data}
           investigationStatus={investigation.status}
           onInvestigate={startInvestigation}
         />

@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { Badge, Group, SegmentedControl, Stack, Switch, Table, Text } from '@mantine/core';
 import { isBlank, isValidEmail } from '../utils';
 
-const ISSUE_COLOR = { 'Missing in target': 'red', 'Null ID': 'red', Duplicate: 'orange', 'Invalid email': 'yellow' };
+const ISSUE_COLOR = { 'Missing in target': 'red', 'Null ID': 'red', Duplicate: 'orange', 'Invalid email': 'yellow', 'Invalid status': 'yellow' };
 
-function annotate(source, target) {
+function annotate(source, target, invalidStatuses) {
+  const badStatus = (s) => invalidStatuses.includes(isBlank(s) ? '<null>' : String(s));
   const key = (v) => (isBlank(v) ? null : String(v).trim());
   const targetIds = new Set(target.map((r) => key(r.customer_id)).filter(Boolean));
   const counts = {};
@@ -17,6 +18,7 @@ function annotate(source, target) {
     const issues = [];
     if (!targetIds.has(key(r.customer_id))) issues.push('Missing in target');
     if (!isValidEmail(r.email)) issues.push('Invalid email');
+    if (badStatus(r.status)) issues.push('Invalid status');
     return { row: r, issues };
   });
   const tgt = target.map((r) => {
@@ -25,15 +27,19 @@ function annotate(source, target) {
     if (!k) issues.push('Null ID');
     else if (counts[k] > 1) issues.push('Duplicate');
     if (!isValidEmail(r.email)) issues.push('Invalid email');
+    if (badStatus(r.status)) issues.push('Invalid status');
     return { row: r, issues };
   });
   return { source: src, target: tgt };
 }
 
-export default function DataCompare({ source, target }) {
+export default function DataCompare({ source, target, invalidStatuses = [] }) {
   const [side, setSide] = useState('target');
   const [onlyIssues, setOnlyIssues] = useState(false);
-  const annotated = useMemo(() => annotate(source, target), [source, target]);
+  const annotated = useMemo(
+    () => annotate(source, target, invalidStatuses),
+    [source, target, invalidStatuses],
+  );
 
   const rows = annotated[side];
   const shown = onlyIssues ? rows.filter((r) => r.issues.length) : rows;
