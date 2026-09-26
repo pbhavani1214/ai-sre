@@ -90,11 +90,16 @@ def _result(name: str, status: str, summary: str, metrics: dict[str, Any], obser
             "metrics": metrics, "evidence": evidence}
 
 
+# Given key columns, return the key values already stored in the target (as SQLite returns them).
+ExistingKeys = Callable[[list[str]], set[tuple]]
+
+
 class _Context:
     """The upload and schema, pre-indexed once for all checks."""
 
-    def __init__(self, schema: dict[str, Any], upload: ParsedUpload):
+    def __init__(self, schema: dict[str, Any], upload: ParsedUpload, existing: ExistingKeys | None = None):
         self.upload = upload
+        self.existing = existing
         self.columns = schema["columns"]
         self.by_name = {c["name"]: c for c in self.columns}
         self.constraints = schema["constraints"]
@@ -191,12 +196,14 @@ def check_not_null(ctx: _Context) -> dict[str, Any]:
 
 
 def _duplicates(ctx: _Context, name: str, keys: list[list[str]], label: str, no_keys: str) -> dict[str, Any]:
-    """Duplicate key values within the upload, compared the way SQLite would compare them."""
+    """Duplicate key values within the upload and, when the target can be read, key values that already
+    exist in the target (CONTRACT.md 8.5, 8.6, 21). Keys are compared the way SQLite compares them."""
     keys = [k for k in keys if all(ctx.present(c) for c in k)]
     if not keys:
         return _result(name, "SKIPPED", no_keys, {"affected_rows": 0, "duplicate_values": 0}, [])
     found: list[tuple[int, str]] = []
     rows_hit: set[int] = set()
+    duplicates = conflicts = 0
     for key in keys:
         seen: dict[tuple, list[int]] = {}
         first_raw: dict[tuple, list[str]] = {}
@@ -208,15 +215,28 @@ def _duplicates(ctx: _Context, name: str, keys: list[list[str]], label: str, no_
             k = tuple(_comparable(v, ctx.rule[c]) for v, c in zip(raw, key))
             seen.setdefault(k, []).append(row)
             first_raw.setdefault(k, raw)
+        stored = ctx.existing(key) if ctx.existing else set()
         for k, rows in seen.items():
             if len(rows) > 1:
                 rows_hit.update(rows)
+                duplicates += 1
                 found.append((rows[0], f"{_key_text(key, first_raw[k])} appears {len(rows)} times ({_rows_text(rows)})"))
+            if k in stored:
+                rows_hit.update(rows)
+                conflicts += 1
+                found.append((rows[0], f"{_key_text(key, first_raw[k])} already exists in the target table "
+                                       f"({_rows_text(rows)})"))
     found.sort()
+    metrics = {"affected_rows": len(rows_hit), "duplicate_values": duplicates}
+    if ctx.existing:
+        metrics["existing_values"] = conflicts
+    parts = [f"{duplicates} duplicate {label} value(s) in the uploaded data"] if duplicates else []
+    if conflicts:
+        parts.append(f"{conflicts} {label} value(s) already in the target table")
     return _result(name, "FAILED" if found else "PASSED",
-                   f"{len(found)} duplicate {label} value(s) in the uploaded data" if found
-                   else f"No duplicate {label} values in the uploaded data",
-                   {"affected_rows": len(rows_hit), "duplicate_values": len(found)}, [t for _, t in found])
+                   "; ".join(parts) if found else f"No duplicate {label} values"
+                   + (" in the uploaded data or the target table" if ctx.existing else " in the uploaded data"),
+                   metrics, [t for _, t in found])
 
 
 def check_primary_key_uniqueness(ctx: _Context) -> dict[str, Any]:
@@ -261,9 +281,12 @@ CHECKS = [check_required_columns, check_unexpected_columns, check_data_type_comp
           check_primary_key_uniqueness, check_unique_constraints, check_check_constraints]
 
 
-def validate_upload(schema: dict[str, Any], upload: ParsedUpload) -> list[dict[str, Any]]:
-    """All checks, in CHECK_NAMES order. Only a FAILED result blocks the load."""
-    ctx = _Context(schema, upload)
+def validate_upload(schema: dict[str, Any], upload: ParsedUpload,
+                    existing: ExistingKeys | None = None) -> list[dict[str, Any]]:
+    """All checks, in CHECK_NAMES order. Only a FAILED result blocks the load.
+
+    `existing` lets the key checks also look for values already stored in the target table."""
+    ctx = _Context(schema, upload, existing)
     return [check(ctx) for check in CHECKS]
 
 

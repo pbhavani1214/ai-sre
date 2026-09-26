@@ -13,13 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.ai.provider import LLMError, LLMProvider, LLMTimeoutError, get_provider
 from src.api.schemas import (
     DemoRunResponse, DemoScenarioResponse, HealthResponse, InvestigateRequest, InvestigateResponse,
-    RunSummary, TargetListResponse, TargetSchemaResponse,
+    RunInvestigateResponse, RunSummary, TargetListResponse, TargetSchemaResponse,
 )
 from src.config import cors_origins, target_db_path
 from src.investigation.models import InvestigationParseError
 from src.investigation.service import investigate_pipeline
 from src.runs.ingest import UploadError, check_file_type, parse_csv, read_limited
-from src.runs.service import validate_run
+from src.runs.service import INVESTIGABLE, RETRYABLE, execute_run, investigate_run
 from src.runs.store import RunRecord, RunStore, new_run_id, store
 from src.target.database import initialize_database
 from src.target.discovery import discover_schema
@@ -137,6 +137,24 @@ def get_run_store() -> RunStore:
     return store
 
 
+def _run_not_found(run_id: str) -> HTTPException:
+    return api_error(404, "run_not_found", f"Run '{run_id}' was not found.", "run_id")
+
+
+def _start_run(target, file: UploadFile, runs: RunStore, db: str, parent_run_id: str | None = None) -> dict:
+    """Read the file, create the run, validate it and load it if nothing FAILED. An unreadable file creates no run."""
+    try:
+        check_file_type(file.filename)
+        upload = parse_csv(read_limited(file.file))
+    except UploadError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail()) from e
+    record = RunRecord(run_id=new_run_id(), target_id=target.target_id, target_table=target.table_name,
+                       file_name=file.filename, upload=upload, parent_run_id=parent_run_id)
+    runs.add(record)
+    execute_run(record, db)
+    return record.to_summary()
+
+
 @app.post("/api/runs", response_model=RunSummary, status_code=201)
 def create_run(
     target_id: str = Form(...),
@@ -144,29 +162,73 @@ def create_run(
     runs: RunStore = Depends(get_run_store),
     db: str = Depends(get_target_db),
 ) -> dict:
-    """Upload one CSV for a target, create a run and validate it against the target's discovered schema.
-
-    A file that can't be read creates no run. The target table is only read, never written."""
+    """Upload one CSV for a target: validate it against the discovered schema, then append it to the target
+    in one transaction if no check FAILED."""
     target = get_target(target_id)
     if target is None:
         raise api_error(404, "target_not_found", f"Target '{target_id}' was not found.", "target_id")
-    try:
-        check_file_type(file.filename)
-        upload = parse_csv(read_limited(file.file))
-    except UploadError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail()) from e
-    record = RunRecord(run_id=new_run_id(), target_id=target.target_id, target_table=target.table_name,
-                       file_name=file.filename, upload=upload)
-    runs.add(record)
-    with closing(sqlite3.connect(db)) as conn:
-        schema = discover_schema(conn, target.table_name)
-    validate_run(record, schema)
-    return record.to_summary()
+    return _start_run(target, file, runs, db)
 
 
 @app.get("/api/runs/{run_id}", response_model=RunSummary)
 def get_run(run_id: str, runs: RunStore = Depends(get_run_store)) -> dict:
     record = runs.get(run_id)
     if record is None:
-        raise api_error(404, "run_not_found", f"Run '{run_id}' was not found.", "run_id")
+        raise _run_not_found(run_id)
     return record.to_summary()
+
+
+@app.post("/api/runs/{run_id}/retry", response_model=RunSummary, status_code=201)
+def retry_run(
+    run_id: str,
+    file: UploadFile = File(...),
+    runs: RunStore = Depends(get_run_store),
+    db: str = Depends(get_target_db),
+) -> dict:
+    """Create a NEW run from a corrected CSV for the same target. The original run is not changed."""
+    parent = runs.get(run_id)
+    if parent is None:
+        raise _run_not_found(run_id)
+    if parent.status not in RETRYABLE:
+        raise api_error(409, "run_not_retryable",
+                        f"Run '{run_id}' is {parent.status}; only FAILED_VALIDATION or LOAD_FAILED runs can be retried.",
+                        "run_id")
+    return _start_run(get_target(parent.target_id), file, runs, db, parent_run_id=parent.run_id)
+
+
+@app.post("/api/runs/{run_id}/investigate", response_model=RunInvestigateResponse)
+def investigate_live_run(
+    run_id: str,
+    runs: RunStore = Depends(get_run_store),
+    make_provider: Callable[[], LLMProvider] = Depends(get_llm_provider),
+) -> RunInvestigateResponse:
+    """AI investigation of a failed run, from that run's stored evidence only. Validation is not re-run and the
+    run status doesn't change; the result is saved on the run."""
+    record = runs.get(run_id)
+    if record is None:
+        raise _run_not_found(run_id)
+    if record.status not in INVESTIGABLE:
+        raise api_error(409, "run_not_investigable",
+                        f"Run '{run_id}' is {record.status}; only FAILED_VALIDATION or LOAD_FAILED runs can be "
+                        "investigated.", "run_id")
+    try:
+        provider = make_provider()
+    except LLMError as e:
+        raise api_error(503, "llm_not_configured", "AI investigation is not configured.") from e
+    try:
+        result = investigate_run(record, provider)
+    except InvestigationParseError as e:
+        log.warning("Unparseable LLM output for %s: %s", run_id, e)
+        raise api_error(502, "invalid_ai_response", "AI investigation returned an invalid response.") from e
+    except LLMTimeoutError as e:
+        log.warning("LLM timed out for %s: %s", run_id, e)
+        raise api_error(504, "llm_timeout", "AI investigation timed out.") from e
+    except LLMError as e:
+        log.warning("LLM call failed for %s: %s", run_id, e)
+        raise api_error(502, "llm_provider_error", "The AI provider could not complete the investigation.") from e
+    except Exception as e:  # never leak a stack trace to the frontend
+        log.exception("Run investigation failed unexpectedly")
+        raise api_error(500, "internal_error", "Investigation failed due to an internal error.") from e
+    response = RunInvestigateResponse(run_id=record.run_id, **InvestigateResponse.from_result(result).model_dump())
+    record.investigation = response.model_dump()
+    return response
