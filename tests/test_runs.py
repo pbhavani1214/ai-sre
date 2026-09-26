@@ -42,11 +42,17 @@ def test_valid_csv_creates_a_run(runs):
     body = r.json()
     assert re.fullmatch(r"run_[0-9a-f]{12}", body["run_id"])
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", body["created_at"])
+    # Since Milestone 3 the run is validated before the response; a valid file stops at LOADING
+    # (loading is Milestone 4), with every check PASSED and nothing loaded.
+    assert [v["name"] for v in body["validation_results"]] == [
+        "required_columns", "unexpected_columns", "data_type_compatibility", "not_null",
+        "primary_key_uniqueness", "unique_constraints", "check_constraints"]
+    assert all(v["status"] == "PASSED" for v in body["validation_results"])
     assert body == {
         "run_id": body["run_id"], "parent_run_id": None, "target_id": "customer", "target_table": "customer",
-        "file_name": "customer.csv", "status": "CREATED", "created_at": body["created_at"], "completed_at": None,
-        "summary": {"rows_received": 2, "checks_total": 0, "checks_passed": 0, "checks_failed": 0},
-        "validation_results": [], "load_result": None,
+        "file_name": "customer.csv", "status": "LOADING", "created_at": body["created_at"], "completed_at": None,
+        "summary": {"rows_received": 2, "checks_total": 7, "checks_passed": 7, "checks_failed": 0},
+        "validation_results": body["validation_results"], "load_result": None,
     }
     assert len(runs) == 1
 

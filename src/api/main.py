@@ -19,6 +19,7 @@ from src.config import cors_origins, target_db_path
 from src.investigation.models import InvestigationParseError
 from src.investigation.service import investigate_pipeline
 from src.runs.ingest import UploadError, check_file_type, parse_csv, read_limited
+from src.runs.service import validate_run
 from src.runs.store import RunRecord, RunStore, new_run_id, store
 from src.target.database import initialize_database
 from src.target.discovery import discover_schema
@@ -141,8 +142,11 @@ def create_run(
     target_id: str = Form(...),
     file: UploadFile = File(...),
     runs: RunStore = Depends(get_run_store),
+    db: str = Depends(get_target_db),
 ) -> dict:
-    """Upload one CSV for a target and create a run. A file that can't be read creates no run."""
+    """Upload one CSV for a target, create a run and validate it against the target's discovered schema.
+
+    A file that can't be read creates no run. The target table is only read, never written."""
     target = get_target(target_id)
     if target is None:
         raise api_error(404, "target_not_found", f"Target '{target_id}' was not found.", "target_id")
@@ -154,6 +158,9 @@ def create_run(
     record = RunRecord(run_id=new_run_id(), target_id=target.target_id, target_table=target.table_name,
                        file_name=file.filename, upload=upload)
     runs.add(record)
+    with closing(sqlite3.connect(db)) as conn:
+        schema = discover_schema(conn, target.table_name)
+    validate_run(record, schema)
     return record.to_summary()
 
 
