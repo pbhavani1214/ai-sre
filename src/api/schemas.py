@@ -176,3 +176,43 @@ class TargetSchemaResponse(BaseModel):
     database_type: Literal["sqlite"]
     columns: list[TargetColumnOut]
     constraints: list[TargetConstraintOut]
+
+
+# --- runs (CONTRACT.md: Run Creation, Run Status, Run Response, GET Run) ----------------------
+
+RunStatus = Literal["CREATED", "VALIDATING", "FAILED_VALIDATION", "LOADING", "SUCCEEDED", "LOAD_FAILED"]
+
+
+class RunValidationResultOut(BaseModel):
+    name: str
+    status: Literal["PASSED", "FAILED", "WARNING", "SKIPPED"]
+    severity: Literal["INFO", "WARNING", "ERROR"]
+    summary: str
+    metrics: dict[str, Any]
+    evidence: list[str]
+
+
+class RunCounts(BaseModel):
+    rows_received: int
+    checks_total: int
+    checks_passed: int
+    checks_failed: int
+
+
+class LoadResult(BaseModel):
+    rows_loaded: int
+    target_table: str
+
+
+class RunSummary(BaseModel):
+    run_id: str
+    parent_run_id: str | None
+    target_id: str
+    target_table: str
+    file_name: str
+    status: RunStatus
+    created_at: str
+    completed_at: str | None
+    summary: RunCounts
+    validation_results: list[RunValidationResultOut]
+    load_result: LoadResult | None
