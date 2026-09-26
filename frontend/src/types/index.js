@@ -68,6 +68,52 @@
  * @property {{stage: string, description: string}[]} investigation_trace
  * @property {string[]} evidence_warnings
  *
+ * --- Live flow: target tables (AI_SRE_CONTRACT_v2 §6-7) ---
+ *
+ * @typedef {Object} TargetSummary  one entry of GET /api/targets -> {targets: TargetSummary[]}
+ * @property {string} target_id       stable ID used in API calls; never build table names from it
+ * @property {string} table_name      the actual database table
+ * @property {string} display_name
+ * @property {string} [description]
+ * @property {string} database_type   "sqlite"
+ *
+ * @typedef {Object} TargetColumn
+ * @property {string} name
+ * @property {string} data_type       e.g. "INTEGER", "TEXT"
+ * @property {boolean} nullable
+ * @property {boolean} primary_key
+ * @property {boolean} unique
+ *
+ * @typedef {Object} TargetConstraint
+ * @property {string} type            "PRIMARY_KEY" | "UNIQUE" | "NOT_NULL" | "CHECK" (others possible)
+ * @property {string[]} columns
+ * @property {string[]} [allowed_values]   CHECK constraints listing their allowed values
+ * @property {string} description
+ *
+ * @typedef {Object} TargetDetail  GET /api/targets/{target_id}
+ * @property {string} target_id
+ * @property {string} table_name
+ * @property {string} database_type
+ * @property {TargetColumn[]} columns
+ * @property {TargetConstraint[]} constraints
+ *
+ * --- Live flow: runs (AI_SRE_CONTRACT_v2 §11-15) ---
+ *
+ * @typedef {'CREATED'|'VALIDATING'|'FAILED_VALIDATION'|'LOADING'|'SUCCEEDED'|'LOAD_FAILED'} RunStatus
+ *
+ * @typedef {Object} RunSummary  POST /api/runs (201), GET /api/runs/{run_id}
+ * @property {string} run_id
+ * @property {string|null} parent_run_id
+ * @property {string} target_id
+ * @property {string} target_table
+ * @property {string} file_name
+ * @property {RunStatus} status
+ * @property {string} created_at
+ * @property {string|null} completed_at
+ * @property {{rows_received: number, checks_total: number, checks_passed: number, checks_failed: number}} summary
+ * @property {Object[]} validation_results   rendered in a later milestone
+ * @property {{rows_loaded: number, target_table: string} | null} load_result
+ *
  * @typedef {Object} Health  GET /health
  * @property {'ok'} status
  * @property {boolean} llm_configured
