@@ -126,7 +126,10 @@
  * @property {string|null} completed_at
  * @property {RunCounts} summary
  * @property {RunValidationResult[]} validation_results
- * @property {{rows_loaded: number, target_table: string} | null} load_result
+ * @property {Object<string, any> | null} load_result   CONTRACT.md §14/§22: {rows_loaded, target_table}; rendered
+ *                                                     generically so any fields the backend adds are shown
+ *
+ * @typedef {InvestigationResult & {run_id: string}} RunInvestigation  POST /api/runs/{run_id}/investigate (§16)
  *
  * @typedef {Object} Health  GET /health
  * @property {'ok'} status
