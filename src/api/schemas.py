@@ -131,3 +131,36 @@ class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     llm_configured: bool
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+# --- Phase 1: uploaded runs -------------------------------------------------------------------
+
+class ColumnInfo(BaseModel):
+    name: str
+    non_null_count: int
+    sample_values: list[str]
+
+
+class DatasetInfo(BaseModel):
+    file_name: str
+    row_count: int
+    columns: list[ColumnInfo]
+    preview: list[dict[str, str | None]]
+
+
+class RunSummary(BaseModel):
+    run_id: str
+    created_at: str = Field(description="UTC, ISO 8601, second precision, 'Z' suffix")
+    source: DatasetInfo
+    target: DatasetInfo
+    pipeline_run: dict[str, Any] | None
+
+
+class UploadErrorDetail(BaseModel):
+    code: str
+    message: str
+    field: str | None
+
+
+class UploadErrorResponse(BaseModel):
+    detail: UploadErrorDetail

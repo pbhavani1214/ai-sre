@@ -132,8 +132,20 @@ _(BE session: add anything in the contract that is unclear or impossible here, t
 
 ## Completion report
 
-_(BE session: fill in when done.)_
-- Branch / PR:
-- Test count before → after:
-- Deviations from the contract (should be none):
-- Anything not done, and why:
+- Branch / PR: `feat/phase-1-uploads` → pull request into `main` (see the PR list for the number).
+- Test count before → after: 81 → 122 (`tests/test_runs.py` adds 41, all passing).
+- Deviations from the contract (should be none): none. Paths, fields, types, status codes, error codes, the
+  `{"detail": {"code", "message", "field"}}` form, contract-order reporting and the 404 message are as
+  specified.
+- Anything not done, and why: nothing from the task list. Notes for later phases:
+  - **Stricter than pandas on extra fields.** When every data row has one field more than the header,
+    pandas doesn't raise an error: it silently uses the first column as the index and shifts the data. The
+    upload checks row widths with the `csv` module first, so this case correctly returns `invalid_csv`.
+  - **Server-side request size.** `read_limited` stops reading at the limit, but Starlette has already
+    spooled the whole multipart body to a temporary file by then. A client can still send a very large
+    request body. Capping it (for example at the proxy or with a request-size middleware) fits Phase 4.
+  - **`NaN` in the run log.** It's rejected as `invalid_pipeline_run`, because the contract says missing
+    values are JSON `null`, never `NaN`.
+  - **Checklist.** Tests pass, the manual `curl` checks pass (upload `201` and an identical `GET` body;
+    broken file → structured `422`; unknown ID → `404`), the demo endpoints and `/api/investigate` are
+    unchanged, and only BE-owned files changed (plus this report).

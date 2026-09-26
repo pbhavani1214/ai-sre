@@ -42,7 +42,8 @@ missing, but 5 duplicate rows hide the gap.
 | `src/investigation/models.py` | Structured result: summary, hypotheses, evidence, root cause, fix, regression test |
 | `src/investigation/service.py` | Builds the evidence, sends it to the LLM, parses structured JSON output |
 | `tests/test_validation.py` | Proves the validation tools work, plus the investigation wiring (stub LLM) |
-| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate` |
+| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate`, `/api/runs` |
+| `src/runs/` | Uploaded runs: CSV and run-log parsing and validation (`ingest.py`), in-memory store (`store.py`), summary and preview (`summary.py`) |
 | `frontend/` | React + Vite + Mantine UI (see `frontend/README.md`) |
 | `example_usage.py` | How another module calls the investigation service |
 
@@ -80,6 +81,11 @@ npm run dev
 Open http://localhost:5173. The header badge should read **Backend connected**. Without `LLM_API_KEY` it reads
 **AI not configured**: the evidence still loads, but "Investigate with AI" returns an error. The backend only
 accepts browser calls from the origins in `CORS_ORIGINS` (the Vite dev server by default).
+
+**Uploads.** `POST /api/runs` takes a source CSV, a target CSV and an optional pipeline run JSON file, and
+`GET /api/runs/{run_id}` fetches the summary again. Limits: 10 MB and 50,000 data rows per CSV, 1 MB for the
+run log. Runs are kept in memory (the latest 20) and are lost when the backend restarts. The full API is in
+[`docs/implementation/CONTRACT.md`](docs/implementation/CONTRACT.md).
 
 ## Intended architecture (React + FastAPI)
 
