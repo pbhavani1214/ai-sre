@@ -24,12 +24,21 @@
  *
  * --- Live flow: target tables (AI_SRE_CONTRACT_v2 §6-7) ---
  *
- * @typedef {Object} TargetSummary  one entry of GET /api/targets -> {targets: TargetSummary[]}
+ * @typedef {Object} DatabaseSummary  one entry of GET /api/databases -> {databases: DatabaseSummary[]} (§5a)
+ * @property {string} database_id     stable ID used in API calls; never build file paths from it
+ * @property {string} display_name
+ * @property {string} file_name
+ * @property {string} database_type   "sqlite"
+ * @property {number} table_count
+ * @property {boolean} is_default
+ *
+ * @typedef {Object} TargetSummary  one entry of GET /api/targets?database_id= -> {targets: TargetSummary[]}
  * @property {string} target_id       stable ID used in API calls; never build table names from it
  * @property {string} table_name      the actual database table
  * @property {string} display_name
  * @property {string} [description]
  * @property {string} database_type   "sqlite"
+ * @property {string} database_id
  *
  * @typedef {Object} TargetColumn
  * @property {string} name
@@ -48,6 +57,7 @@
  * @property {string} target_id
  * @property {string} table_name
  * @property {string} database_type
+ * @property {string} database_id
  * @property {TargetColumn[]} columns
  * @property {TargetConstraint[]} constraints
  *
@@ -72,6 +82,7 @@
  * @typedef {Object} RunSummary  POST /api/runs (201), GET /api/runs/{run_id}
  * @property {string} run_id
  * @property {string|null} parent_run_id
+ * @property {string} database_id     the database the target belongs to (a retry inherits its parent's)
  * @property {string} target_id
  * @property {string} target_table
  * @property {string} file_name

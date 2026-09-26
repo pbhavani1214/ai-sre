@@ -65,31 +65,42 @@ function requireBackend() {
   }
 }
 
-/** @returns {Promise<import('../types').TargetSummary[]>} */
-export async function listTargets() {
+/** GET /api/databases: the SQLite databases a user can choose from (the default one first). */
+export async function listDatabases() {
   requireBackend();
-  const { targets } = await request('/api/targets');
+  const { databases } = await request('/api/databases');
+  return databases;
+}
+
+const withDatabase = (path, databaseId) => (databaseId ? `${path}?database_id=${encodeURIComponent(databaseId)}` : path);
+
+/** GET /api/targets?database_id=: the tables of one database. @returns {Promise<import('../types').TargetSummary[]>} */
+export async function listTargets(databaseId) {
+  requireBackend();
+  const { targets } = await request(withDatabase('/api/targets', databaseId));
   return targets;
 }
 
 /** @returns {Promise<import('../types').TargetDetail>} */
-export async function getTarget(targetId) {
+export async function getTarget(targetId, databaseId) {
   requireBackend();
-  return request(`/api/targets/${encodeURIComponent(targetId)}`);
+  return request(withDatabase(`/api/targets/${encodeURIComponent(targetId)}`, databaseId));
 }
 
 /**
  * POST /api/runs: creates a run from ONE uploaded CSV for the selected target (multipart/form-data).
- * Sends exactly `target_id` and `file`. The backend owns validation.
+ * Sends `target_id`, `file` and, when a database was chosen, `database_id`. The backend owns validation.
  * @param {string} targetId
  * @param {File} file
+ * @param {string} [databaseId]
  * @returns {Promise<import('../types').RunSummary>}
  */
-export async function createRun(targetId, file) {
+export async function createRun(targetId, file, databaseId) {
   requireBackend();
   const form = new FormData();
   form.append('target_id', targetId);
   form.append('file', file);
+  if (databaseId) form.append('database_id', databaseId);
   // No content-type header: the browser sets multipart/form-data with its boundary.
   return request('/api/runs', { method: 'POST', body: form });
 }

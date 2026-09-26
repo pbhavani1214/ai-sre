@@ -143,12 +143,26 @@ class ApiErrorDetail(BaseModel):
     field: str | None = None
 
 
+class DatabaseOut(BaseModel):
+    database_id: str
+    display_name: str
+    file_name: str
+    database_type: Literal["sqlite"]
+    table_count: int
+    is_default: bool
+
+
+class DatabaseListResponse(BaseModel):
+    databases: list[DatabaseOut]
+
+
 class TargetOut(BaseModel):
     target_id: str
     table_name: str
     display_name: str
     description: str | None = None
     database_type: Literal["sqlite"]
+    database_id: str
 
 
 class TargetListResponse(BaseModel):
@@ -174,6 +188,7 @@ class TargetSchemaResponse(BaseModel):
     target_id: str
     table_name: str
     database_type: Literal["sqlite"]
+    database_id: str
     columns: list[TargetColumnOut]
     constraints: list[TargetConstraintOut]
 
@@ -207,6 +222,7 @@ class LoadResult(BaseModel):
 class RunSummary(BaseModel):
     run_id: str
     parent_run_id: str | None
+    database_id: str
     target_id: str
     target_table: str
     file_name: str
