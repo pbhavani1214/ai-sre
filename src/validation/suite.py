@@ -189,3 +189,14 @@ def get_demo_scenario() -> dict[str, Any]:
         "validation_summary": {k: suite[k] for k in ("total_checks", "passed_checks", "failed_checks")},
         "validation_results": suite["results"],
     }
+
+
+def _records(df: pd.DataFrame) -> list[dict[str, Any]]:
+    """DataFrame rows as JSON-safe dicts (missing values become None)."""
+    return df.astype(object).where(df.notna(), None).to_dict("records")
+
+
+def get_demo_run() -> dict[str, Any]:
+    """Raw demo inputs for the UI's evidence explorer: the pipeline run record and both datasets."""
+    source, target, run = load_scenario()
+    return {"pipeline_run": run, "source": _records(source), "target": _records(target)}

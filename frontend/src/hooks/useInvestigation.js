@@ -11,7 +11,7 @@ export function useInvestigation() {
 
   useEffect(() => () => clearInterval(timer.current), []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (scenario) => {
     setStatus('running');
     setError(null);
     setElapsed(0);
@@ -19,7 +19,7 @@ export function useInvestigation() {
     clearInterval(timer.current);
     timer.current = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 250);
     try {
-      setResult(await runInvestigation());
+      setResult(await runInvestigation(scenario));
       setStatus('done');
     } catch (e) {
       setError(e);
