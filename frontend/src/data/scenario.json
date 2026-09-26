@@ -1,0 +1,518 @@
+{
+  "pipeline_description": "Nightly customer sync pipeline. Extracts customers from the CRM export (source_customers.csv), casts customer_id to integer, lowercases emails, enriches each customer with a sales region via an INNER JOIN on a country->region lookup table, and loads the result into the warehouse table (target_customers.csv) in batches of 5 rows. Failed batches are retried once. Expected contract: every source customer appears exactly once in target with a non-null customer_id and a valid email.",
+  "source": [
+    {
+      "customer_id": "1001",
+      "name": "Alice Carter",
+      "email": "Alice.Carter@example.com",
+      "country": "US",
+      "signup_date": "2024-01-05"
+    },
+    {
+      "customer_id": "1002",
+      "name": "Bob Singh",
+      "email": "bob.singh@example.com",
+      "country": "IN",
+      "signup_date": "2024-01-09"
+    },
+    {
+      "customer_id": "1003",
+      "name": "Chloe Martin",
+      "email": "chloe.martin@example.com",
+      "country": "GB",
+      "signup_date": "2024-01-12"
+    },
+    {
+      "customer_id": "1004",
+      "name": "Daniel Tan",
+      "email": "daniel.tan@example.com",
+      "country": "SG",
+      "signup_date": "2024-01-15"
+    },
+    {
+      "customer_id": "1005",
+      "name": "Eva Schmidt",
+      "email": "eva.schmidt@example.com",
+      "country": "DE",
+      "signup_date": "2024-01-20"
+    },
+    {
+      "customer_id": "1006",
+      "name": "Farah Khan",
+      "email": "farah.khan@example.com",
+      "country": "IN",
+      "signup_date": "2024-02-02"
+    },
+    {
+      "customer_id": "1007",
+      "name": "George Brown",
+      "email": "george.brown@example",
+      "country": "US",
+      "signup_date": "2024-02-07"
+    },
+    {
+      "customer_id": "1008",
+      "name": "Hannah Lee",
+      "email": "hannah.lee@example.com",
+      "country": "AU",
+      "signup_date": "2024-02-11"
+    },
+    {
+      "customer_id": "1009",
+      "name": "Ivan Petrov",
+      "email": "ivan.petrov@example.com",
+      "country": "DE",
+      "signup_date": "2024-02-18"
+    },
+    {
+      "customer_id": "1010",
+      "name": "Julia Rossi",
+      "email": "julia.rossi@example.com",
+      "country": "GB",
+      "signup_date": "2024-02-25"
+    },
+    {
+      "customer_id": "1011",
+      "name": "Kevin Wong",
+      "email": "kevin.wong@example.com",
+      "country": "CA",
+      "signup_date": "2024-03-01"
+    },
+    {
+      "customer_id": "1012",
+      "name": "Laura Chen",
+      "email": "laura.chen@example.com",
+      "country": "US",
+      "signup_date": "2024-03-04"
+    },
+    {
+      "customer_id": "1013",
+      "name": "Mohan Rao",
+      "email": "mohan.rao@example.com",
+      "country": "IN",
+      "signup_date": "2024-03-08"
+    },
+    {
+      "customer_id": "1014",
+      "name": "Nina Lim",
+      "email": "nina.lim@example.com",
+      "country": "SG",
+      "signup_date": "2024-03-10"
+    },
+    {
+      "customer_id": "1015",
+      "name": "Oscar Diaz",
+      "email": "oscar.diaz@example.com",
+      "country": "US",
+      "signup_date": "2024-03-15"
+    },
+    {
+      "customer_id": "1016",
+      "name": "Priya Nair",
+      "email": "priya.nair@example.com",
+      "country": "IN",
+      "signup_date": "2024-03-19"
+    },
+    {
+      "customer_id": "1017",
+      "name": "Quinn Taylor",
+      "email": "quinn.taylor@example.com",
+      "country": "AU",
+      "signup_date": "2024-03-22"
+    },
+    {
+      "customer_id": "1018",
+      "name": "Rosa Alvarez",
+      "email": "rosa.alvarez@example.com",
+      "country": "CA",
+      "signup_date": "2024-03-27"
+    },
+    {
+      "customer_id": "1019",
+      "name": "Sam Okafor",
+      "email": "sam.okafor@example.com",
+      "country": "GB",
+      "signup_date": "2024-04-01"
+    },
+    {
+      "customer_id": "CUST-1020",
+      "name": "Tara Novak",
+      "email": "tara.novak@example.com",
+      "country": "DE",
+      "signup_date": "2024-04-03"
+    }
+  ],
+  "target": [
+    {
+      "customer_id": "1001",
+      "name": "Alice Carter",
+      "email": "alice.carter@example.com",
+      "country": "US",
+      "signup_date": "2024-01-05",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1002",
+      "name": "Bob Singh",
+      "email": "bob.singh@example.com",
+      "country": "IN",
+      "signup_date": "2024-01-09",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1003",
+      "name": "Chloe Martin",
+      "email": "chloe.martin@example.com",
+      "country": "GB",
+      "signup_date": "2024-01-12",
+      "region": "EMEA"
+    },
+    {
+      "customer_id": "1005",
+      "name": "Eva Schmidt",
+      "email": "eva.schmidt@example.com",
+      "country": "DE",
+      "signup_date": "2024-01-20",
+      "region": "EMEA"
+    },
+    {
+      "customer_id": "1006",
+      "name": "Farah Khan",
+      "email": "farah.khan@example.com",
+      "country": "IN",
+      "signup_date": "2024-02-02",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1007",
+      "name": "George Brown",
+      "email": "george.brown@example",
+      "country": "US",
+      "signup_date": "2024-02-07",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1008",
+      "name": "Hannah Lee",
+      "email": "hannah.lee@example.com",
+      "country": "AU",
+      "signup_date": "2024-02-11",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1009",
+      "name": "Ivan Petrov",
+      "email": "ivan.petrov@example.com",
+      "country": "DE",
+      "signup_date": "2024-02-18",
+      "region": "EMEA"
+    },
+    {
+      "customer_id": "1010",
+      "name": "Julia Rossi",
+      "email": "julia.rossi@example.com",
+      "country": "GB",
+      "signup_date": "2024-02-25",
+      "region": "EMEA"
+    },
+    {
+      "customer_id": "1011",
+      "name": "Kevin Wong",
+      "email": "kevin.wong@example.com",
+      "country": "CA",
+      "signup_date": "2024-03-01",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1012",
+      "name": "Laura Chen",
+      "email": "laura.chen@example.com",
+      "country": "US",
+      "signup_date": "2024-03-04",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1013",
+      "name": "Mohan Rao",
+      "email": "mohan.rao@example.com",
+      "country": "IN",
+      "signup_date": "2024-03-08",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1015",
+      "name": "Oscar Diaz",
+      "email": "oscar.diaz@example.com",
+      "country": "US",
+      "signup_date": "2024-03-15",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1016",
+      "name": "Priya Nair",
+      "email": "priya.nair@example.com",
+      "country": "IN",
+      "signup_date": "2024-03-19",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1017",
+      "name": "Quinn Taylor",
+      "email": "quinn.taylor@example.com",
+      "country": "AU",
+      "signup_date": "2024-03-22",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1012",
+      "name": "Laura Chen",
+      "email": "laura.chen@example.com",
+      "country": "US",
+      "signup_date": "2024-03-04",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1013",
+      "name": "Mohan Rao",
+      "email": "mohan.rao@example.com",
+      "country": "IN",
+      "signup_date": "2024-03-08",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1015",
+      "name": "Oscar Diaz",
+      "email": "oscar.diaz@example.com",
+      "country": "US",
+      "signup_date": "2024-03-15",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1016",
+      "name": "Priya Nair",
+      "email": "priya.nair@example.com",
+      "country": "IN",
+      "signup_date": "2024-03-19",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1017",
+      "name": "Quinn Taylor",
+      "email": "quinn.taylor@example.com",
+      "country": "AU",
+      "signup_date": "2024-03-22",
+      "region": "APAC"
+    },
+    {
+      "customer_id": "1018",
+      "name": "Rosa Alvarez",
+      "email": "rosa.alvarez@example.com",
+      "country": "CA",
+      "signup_date": "2024-03-27",
+      "region": "NA"
+    },
+    {
+      "customer_id": "1019",
+      "name": "Sam Okafor",
+      "email": "sam.okafor@example.com",
+      "country": "GB",
+      "signup_date": "2024-04-01",
+      "region": "EMEA"
+    },
+    {
+      "customer_id": null,
+      "name": "Tara Novak",
+      "email": "tara.novak@example.com",
+      "country": "DE",
+      "signup_date": "2024-04-03",
+      "region": "EMEA"
+    }
+  ],
+  "pipeline_run": {
+    "run_id": "run-2024-04-05-0200",
+    "pipeline": "customer_nightly_sync",
+    "started_at": "2024-04-05T02:00:00Z",
+    "finished_at": "2024-04-05T02:03:41Z",
+    "status": "SUCCESS",
+    "config": {
+      "source": "data/source_customers.csv",
+      "target": "data/target_customers.csv",
+      "batch_size": 5,
+      "max_retries": 1,
+      "join": {
+        "table": "region_lookup",
+        "on": "country",
+        "how": "inner"
+      },
+      "region_lookup_countries": [
+        "AU",
+        "CA",
+        "DE",
+        "GB",
+        "IN",
+        "US"
+      ]
+    },
+    "steps": [
+      {
+        "name": "extract",
+        "status": "SUCCESS",
+        "rows_in": 20,
+        "rows_out": 20
+      },
+      {
+        "name": "transform.cast_customer_id",
+        "status": "SUCCESS",
+        "rows_in": 20,
+        "rows_out": 20,
+        "warnings": [
+          "1 value(s) could not be parsed as integer and were set to null"
+        ]
+      },
+      {
+        "name": "transform.lowercase_email",
+        "status": "SUCCESS",
+        "rows_in": 20,
+        "rows_out": 20
+      },
+      {
+        "name": "transform.join_region_lookup",
+        "status": "SUCCESS",
+        "rows_in": 20,
+        "rows_out": 18
+      },
+      {
+        "name": "load",
+        "status": "SUCCESS",
+        "rows_in": 18,
+        "rows_written": 23,
+        "batches": 4
+      }
+    ],
+    "logs": [
+      "02:00:00 INFO  extract: read 20 rows from source_customers.csv",
+      "02:00:02 WARN  cast_customer_id: 1 value(s) coerced to null",
+      "02:00:03 INFO  lowercase_email: done",
+      "02:00:04 INFO  join_region_lookup: 20 rows in, 18 rows out",
+      "02:01:10 INFO  load: batch 1/4 committed (5 rows)",
+      "02:01:40 INFO  load: batch 2/4 committed (5 rows)",
+      "02:02:15 ERROR load: batch 3/4 timeout after 30s waiting for commit ack",
+      "02:02:16 INFO  load: retrying batch 3/4 (attempt 2/2)",
+      "02:02:50 INFO  load: batch 3/4 committed (5 rows)",
+      "02:03:40 INFO  load: batch 4/4 committed (3 rows)",
+      "02:03:41 INFO  run finished: status=SUCCESS rows_written=23"
+    ]
+  },
+  "validation_results": [
+    {
+      "check": "record_count_comparison",
+      "passed": false,
+      "summary": "source=20 rows, target=23 rows, difference=+3",
+      "details": {
+        "source_count": 20,
+        "target_count": 23,
+        "difference": 3
+      }
+    },
+    {
+      "check": "null_customer_id_check",
+      "passed": false,
+      "summary": "1 target row(s) have a null customer_id",
+      "details": {
+        "null_count": 1,
+        "rows": [
+          {
+            "customer_id": null,
+            "name": "Tara Novak",
+            "email": "tara.novak@example.com",
+            "country": "DE",
+            "signup_date": "2024-04-03",
+            "region": "EMEA"
+          }
+        ]
+      }
+    },
+    {
+      "check": "duplicate_customer_id_check",
+      "passed": false,
+      "summary": "5 customer_id(s) appear more than once (5 extra row(s))",
+      "details": {
+        "duplicate_id_count": 5,
+        "extra_rows": 5,
+        "duplicates": {
+          "1012": 2,
+          "1013": 2,
+          "1015": 2,
+          "1016": 2,
+          "1017": 2
+        }
+      }
+    },
+    {
+      "check": "missing_target_records",
+      "passed": false,
+      "summary": "3 source record(s) not found in target",
+      "details": {
+        "missing_count": 3,
+        "missing_records": [
+          {
+            "customer_id": "1004",
+            "name": "Daniel Tan",
+            "email": "daniel.tan@example.com",
+            "country": "SG",
+            "signup_date": "2024-01-15"
+          },
+          {
+            "customer_id": "1014",
+            "name": "Nina Lim",
+            "email": "nina.lim@example.com",
+            "country": "SG",
+            "signup_date": "2024-03-10"
+          },
+          {
+            "customer_id": "CUST-1020",
+            "name": "Tara Novak",
+            "email": "tara.novak@example.com",
+            "country": "DE",
+            "signup_date": "2024-04-03"
+          }
+        ]
+      }
+    },
+    {
+      "check": "invalid_email_check[source]",
+      "passed": false,
+      "summary": "1 source row(s) have an invalid email",
+      "details": {
+        "invalid_count": 1,
+        "rows": [
+          {
+            "customer_id": "1007",
+            "name": "George Brown",
+            "email": "george.brown@example",
+            "country": "US",
+            "signup_date": "2024-02-07"
+          }
+        ]
+      }
+    },
+    {
+      "check": "invalid_email_check[target]",
+      "passed": false,
+      "summary": "1 target row(s) have an invalid email",
+      "details": {
+        "invalid_count": 1,
+        "rows": [
+          {
+            "customer_id": "1007",
+            "name": "George Brown",
+            "email": "george.brown@example",
+            "country": "US",
+            "signup_date": "2024-02-07",
+            "region": "NA"
+          }
+        ]
+      }
+    }
+  ]
+}

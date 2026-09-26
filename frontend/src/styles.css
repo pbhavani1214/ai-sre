@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+body {
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-8));
+}
+
+.code-block {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  margin: 0;
+  padding: var(--mantine-spacing-md);
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7));
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-md);
+}
+
+.log-line {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 13px;
+}
+
+.row-issue td {
+  background: light-dark(var(--mantine-color-red-0), rgba(250, 82, 82, 0.1));
+}
+.row-warn td {
+  background: light-dark(var(--mantine-color-yellow-0), rgba(250, 176, 5, 0.08));
+}
+
+/* Keep tab rows on one line on small screens; scroll sideways instead of wrapping. */
+.scroll-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.scroll-tabs > * {
+  flex-shrink: 0;
+}
