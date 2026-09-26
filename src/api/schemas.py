@@ -216,3 +216,13 @@ class RunSummary(BaseModel):
     summary: RunCounts
     validation_results: list[RunValidationResultOut]
     load_result: LoadResult | None
+    investigation: "RunInvestigateResponse | None" = None  # latest AI investigation of this run, if any
+
+
+class RunInvestigateResponse(InvestigateResponse):
+    """POST /api/runs/{run_id}/investigate: the existing investigation structure plus the run it belongs to."""
+
+    run_id: str
+
+
+RunSummary.model_rebuild()

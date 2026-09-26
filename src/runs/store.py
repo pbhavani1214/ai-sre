@@ -35,7 +35,11 @@ class RunRecord:
     completed_at: str | None = None
     validation_results: list[dict[str, Any]] = field(default_factory=list)
     load_result: dict[str, Any] | None = None
-    status_history: list[str] = field(default_factory=list)  # internal: every status the run has had
+    investigation: dict[str, Any] | None = None  # latest AI investigation (RunInvestigateResponse)
+    # Internal, never returned directly:
+    status_history: list[str] = field(default_factory=list)  # every status the run has had
+    schema: dict[str, Any] | None = None  # the target schema the run was validated against
+    load_error: str | None = None  # the database error when the load failed
 
     def __post_init__(self):
         self.status_history.append(self.status)
@@ -65,6 +69,7 @@ class RunRecord:
             },
             "validation_results": self.validation_results,
             "load_result": self.load_result,
+            "investigation": self.investigation,
         }
 
 

@@ -90,7 +90,7 @@ RETRY_NOTE = """
 YOUR PREVIOUS RESPONSE WAS REJECTED BY THE SCHEMA VALIDATOR: {error}
 Return ONLY a single JSON object that satisfies the OUTPUT schema above."""
 
-_EVIDENCE_REF = re.compile(r"\b(?:validation|pipeline|dataset)\.[A-Za-z0-9_]+")
+_EVIDENCE_REF = re.compile(r"\b(?:validation|pipeline|dataset)\.[A-Za-z0-9_]+(?:\.\d+)?")
 
 
 # --- evidence context -----------------------------------------------------------------------
@@ -168,6 +168,16 @@ def evidence_catalog(context: dict[str, Any]) -> list[dict[str, str]]:
     for side in ("source", "target"):
         if side in context:
             cat.append({"id": f"dataset.{side}", "location": side})
+    # Upload runs (src/runs/service.py): each evidence line's own ID, the target schema and the upload profile.
+    for i, v in enumerate(context.get("validation_results", [])):
+        for j, line in enumerate(v.get("evidence") or []):
+            m = re.match(r"\[(validation\.[A-Za-z0-9_]+\.\d+)\]", str(line))
+            if m:
+                cat.append({"id": m.group(1), "location": f"validation_results[{i}].evidence[{j}]"})
+    if "target_table" in context:
+        cat.append({"id": "dataset.target_table", "location": "target_table"})
+    if "upload" in context:
+        cat.append({"id": "dataset.upload", "location": "upload"})
     return cat
 
 
@@ -310,6 +320,11 @@ def investigate_pipeline(
         context["validation_results"] = [
             v for v in context["validation_results"] if v.get("name") not in suite_names
         ] + suite_results
+    return _ask_llm(context, provider)
+
+
+def investigate_evidence(context: dict[str, Any], provider: LLMProvider | None = None) -> InvestigationResult:
+    """Investigate a ready-made evidence package (upload runs, see src/runs/service.py)."""
     return _ask_llm(context, provider)
 
 

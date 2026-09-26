@@ -287,7 +287,8 @@ def test_api_failed_validation_run(api):
 
 def test_api_passing_run(api):
     body = upload((DEMO / "customer_fixed.csv").read_bytes(), "customer_fixed.csv").json()
-    assert body["status"] == "LOADING" and body["completed_at"] is None and body["load_result"] is None
+    assert body["status"] == "SUCCEEDED" and body["completed_at"]  # validated, then loaded
+    assert body["load_result"] == {"rows_loaded": 7, "target_table": "customer"}
     assert body["summary"] == {"rows_received": 7, "checks_total": 7, "checks_passed": 7, "checks_failed": 0}
 
 
@@ -315,8 +316,11 @@ def test_validation_never_writes_to_the_target(api, db):
 
     before = snapshot()
     assert len(before) == len(CUSTOMER_SEED)
-    upload((DEMO / "customer_bad.csv").read_bytes(), "customer_bad.csv")
-    upload((DEMO / "customer_fixed.csv").read_bytes(), "customer_fixed.csv")
+    upload((DEMO / "customer_bad.csv").read_bytes(), "customer_bad.csv")  # FAILED_VALIDATION: nothing loaded
+    record = RunRecord("run_v", "customer", "customer", "c.csv",
+                       parse_csv((DEMO / "customer_fixed.csv").read_bytes()))
+    validate_run(record, schema_of(db))  # validation alone never writes, even when every check passes
+    assert record.status == "LOADING"
     assert snapshot() == before
 
 
