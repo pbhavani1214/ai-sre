@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { IconAlertTriangle, IconDownload, IconRefresh, IconSparkles } from '@tabler/icons-react';
-import { InvestigationResult, downloadJson } from './InvestigationPanel';
+import { InvestigationResult, downloadJson } from './InvestigationResult';
 import { investigateRun } from '../services/api';
 import { describeInvestigationError } from '../services/errors';
 

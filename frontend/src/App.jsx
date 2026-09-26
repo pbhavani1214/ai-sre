@@ -4,13 +4,12 @@ import AppHeader from './components/AppHeader';
 import TargetSelectionPage from './pages/TargetSelectionPage';
 import UploadPage from './pages/UploadPage';
 import RunResultPage from './pages/RunResultPage';
-import InvestigationPage from './pages/InvestigationPage';
 import { getRun } from './services/api';
 
 /**
  * Live flow: target selection -> CSV upload -> run result (validation, AI investigation, corrected retry, load).
  * `runs` and `investigations` are keyed by run_id so a retry (child run) and its original (parent) each keep their
- * own state; showing one never changes the other. The bundled demo stays one link away.
+ * own state; showing one never changes the other.
  */
 export default function App() {
   const [view, setView] = useState({ name: 'targets', target: null, runId: null });
@@ -48,7 +47,6 @@ export default function App() {
           <TargetSelectionPage
             initialTargetId={view.target?.target_id ?? null}
             onContinue={(target) => go('upload', { target, runId: null })}
-            onOpenDemo={() => go('demo')}
           />
         )}
         {view.name === 'upload' && (
@@ -74,7 +72,6 @@ export default function App() {
             />
           </>
         )}
-        {view.name === 'demo' && <InvestigationPage />}
       </AppShell.Main>
     </AppShell>
   );

@@ -80,7 +80,7 @@ describe('live flow: target selection -> upload -> run created', () => {
     expect(screen.queryByText('Ready for validation')).not.toBeInTheDocument();
   });
 
-  it('demo story: failed validation -> investigate -> corrected retry -> SUCCEEDED, parent kept unchanged', async () => {
+  it('full live flow: failed validation -> investigate -> corrected retry -> SUCCEEDED, parent kept unchanged', async () => {
     const FAILED = { ...RUN, status: 'FAILED_VALIDATION', completed_at: '2026-09-26T10:30:01Z',
       summary: { rows_received: 7, checks_total: 2, checks_passed: 1, checks_failed: 1 },
       validation_results: [

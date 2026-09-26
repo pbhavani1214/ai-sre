@@ -172,14 +172,12 @@ describe('TargetSelectionPage', () => {
     expect(screen.getByText('This table declares no constraints.')).toBeInTheDocument();
   });
 
-  it('keeps Continue disabled until a target is selected, and offers the demo', async () => {
+  it('keeps Continue disabled until a target is selected, and has no demo link', async () => {
     mockFetch({ 'GET /api/targets': () => [200, TARGETS] });
-    const onOpenDemo = vi.fn();
-    renderWithMantine(<TargetSelectionPage onOpenDemo={onOpenDemo} />);
+    renderWithMantine(<TargetSelectionPage onContinue={vi.fn()} />);
 
     expect(await screen.findByRole('button', { name: 'Continue' })).toBeDisabled();
-    await userEvent.setup().click(screen.getByRole('button', { name: /Try the demo instead/ }));
-    expect(onOpenDemo).toHaveBeenCalled();
+    expect(screen.queryByText(/try the demo/i)).not.toBeInTheDocument();
   });
 
   it('enables Continue only after the selected target schema has loaded, then continues with that target', async () => {

@@ -3,7 +3,7 @@ import { IconActivityHeartbeat, IconMoon, IconSun } from '@tabler/icons-react';
 import { useHealth } from '../hooks/useHealth';
 
 const HEALTH_BADGE = {
-  mock: { color: 'gray', label: 'Demo data', tip: 'No backend configured (VITE_API_BASE_URL). Showing bundled sample data.' },
+  mock: { color: 'red', label: 'No backend configured', tip: 'Set VITE_API_BASE_URL in frontend/.env (for example http://localhost:8000) and restart npm run dev.' },
   ready: { color: 'green', label: 'Backend connected', tip: 'Backend reachable and the AI provider is configured.' },
   'no-llm': { color: 'yellow', label: 'AI not configured', tip: 'Backend reachable, but it has no LLM API key. Set LLM_API_KEY in the backend .env.' },
   offline: { color: 'red', label: 'Backend offline', tip: 'Could not reach the backend.' },

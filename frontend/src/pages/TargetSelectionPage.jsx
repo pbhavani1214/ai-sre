@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
-  Alert, Anchor, Button, Card, Container, Group, Loader, Select, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip,
+  Alert, Button, Card, Container, Group, Loader, Select, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, Tooltip,
 } from '@mantine/core';
-import { IconAlertTriangle, IconArrowRight, IconDatabase, IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowRight, IconDatabase, IconRefresh } from '@tabler/icons-react';
 import TargetSchema from '../components/TargetSchema';
 import { useTargetDetail, useTargets } from '../hooks/useTargets';
 import { databaseLabel } from '../utils';
@@ -55,7 +55,7 @@ function SchemaSection({ target, detail, onReloadTargets }) {
   return detail.data ? <TargetSchema detail={detail.data} /> : null;
 }
 
-export default function TargetSelectionPage({ initialTargetId = null, onContinue, onOpenDemo }) {
+export default function TargetSelectionPage({ initialTargetId = null, onContinue }) {
   const targets = useTargets();
   const [selectedId, setSelectedId] = useState(initialTargetId);
   const detail = useTargetDetail(selectedId);
@@ -130,10 +130,7 @@ export default function TargetSelectionPage({ initialTargetId = null, onContinue
           </Card>
         )}
 
-        <Group justify="space-between">
-          <Anchor component="button" size="sm" onClick={onOpenDemo}>
-            <Group gap={4}><IconPlayerPlay size={14} /> Try the demo instead</Group>
-          </Anchor>
+        <Group justify="flex-end">
           <Tooltip label="Select a target and wait for its schema to load" disabled={canContinue}>
             {/* A disabled button fires no mouse events, so the tooltip needs a wrapper. */}
             <span>
