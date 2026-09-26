@@ -68,6 +68,35 @@
  * @property {{stage: string, description: string}[]} investigation_trace
  * @property {string[]} evidence_warnings
  *
+ * --- Live flow: target tables (AI_SRE_CONTRACT_v2 §6-7) ---
+ *
+ * @typedef {Object} TargetSummary  one entry of GET /api/targets -> {targets: TargetSummary[]}
+ * @property {string} target_id       stable ID used in API calls; never build table names from it
+ * @property {string} table_name      the actual database table
+ * @property {string} display_name
+ * @property {string} [description]
+ * @property {string} database_type   "sqlite"
+ *
+ * @typedef {Object} TargetColumn
+ * @property {string} name
+ * @property {string} data_type       e.g. "INTEGER", "TEXT"
+ * @property {boolean} nullable
+ * @property {boolean} primary_key
+ * @property {boolean} unique
+ *
+ * @typedef {Object} TargetConstraint
+ * @property {string} type            "PRIMARY_KEY" | "UNIQUE" | "NOT_NULL" | "CHECK" (others possible)
+ * @property {string[]} columns
+ * @property {string[]} [allowed_values]   CHECK constraints listing their allowed values
+ * @property {string} description
+ *
+ * @typedef {Object} TargetDetail  GET /api/targets/{target_id}
+ * @property {string} target_id
+ * @property {string} table_name
+ * @property {string} database_type
+ * @property {TargetColumn[]} columns
+ * @property {TargetConstraint[]} constraints
+ *
  * @typedef {Object} Health  GET /health
  * @property {'ok'} status
  * @property {boolean} llm_configured

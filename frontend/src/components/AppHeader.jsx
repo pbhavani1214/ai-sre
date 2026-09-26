@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Container, Group, Text, ThemeIcon, Tooltip, useComputedColorScheme, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Badge, Container, Group, Text, ThemeIcon, Tooltip, UnstyledButton, useComputedColorScheme, useMantineColorScheme } from '@mantine/core';
 import { IconActivityHeartbeat, IconMoon, IconSun } from '@tabler/icons-react';
 import { useHealth } from '../hooks/useHealth';
 
@@ -9,7 +9,7 @@ const HEALTH_BADGE = {
   offline: { color: 'red', label: 'Backend offline', tip: 'Could not reach the backend.' },
 };
 
-export default function AppHeader() {
+export default function AppHeader({ onHome }) {
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme('light');
   const dark = scheme === 'dark';
@@ -18,15 +18,17 @@ export default function AppHeader() {
   return (
     <Container size="lg" h="100%">
       <Group h="100%" justify="space-between" wrap="nowrap">
-        <Group gap="sm" wrap="nowrap">
-          <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }}>
-            <IconActivityHeartbeat size={20} />
-          </ThemeIcon>
-          <div>
-            <Text fw={700} lh={1.1}>AI Reliability Engineer</Text>
-            <Text size="xs" c="dimmed" lh={1.1} visibleFrom="xs">Evidence-based pipeline investigation</Text>
-          </div>
-        </Group>
+        <UnstyledButton onClick={onHome} aria-label="Go to target selection">
+          <Group gap="sm" wrap="nowrap">
+            <ThemeIcon size="lg" radius="md" variant="gradient" gradient={{ from: 'indigo', to: 'cyan' }}>
+              <IconActivityHeartbeat size={20} />
+            </ThemeIcon>
+            <div>
+              <Text fw={700} lh={1.1}>AI Reliability Engineer</Text>
+              <Text size="xs" c="dimmed" lh={1.1} visibleFrom="xs">Evidence-based pipeline investigation</Text>
+            </div>
+          </Group>
+        </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
           {badge && (
             <Tooltip label={badge.tip} multiline w={260}>
