@@ -172,7 +172,7 @@ describe('TargetSelectionPage', () => {
     expect(screen.getByText('This table declares no constraints.')).toBeInTheDocument();
   });
 
-  it('keeps Continue disabled in this milestone and offers the demo', async () => {
+  it('keeps Continue disabled until a target is selected, and offers the demo', async () => {
     mockFetch({ 'GET /api/targets': () => [200, TARGETS] });
     const onOpenDemo = vi.fn();
     renderWithMantine(<TargetSelectionPage onOpenDemo={onOpenDemo} />);
@@ -180,5 +180,37 @@ describe('TargetSelectionPage', () => {
     expect(await screen.findByRole('button', { name: 'Continue' })).toBeDisabled();
     await userEvent.setup().click(screen.getByRole('button', { name: /Try the demo instead/ }));
     expect(onOpenDemo).toHaveBeenCalled();
+  });
+
+  it('enables Continue only after the selected target schema has loaded, then continues with that target', async () => {
+    const pending = deferred();
+    mockFetch({
+      'GET /api/targets': () => [200, TARGETS],
+      'GET /api/targets/orders': () => pending.promise,
+    });
+    const onContinue = vi.fn();
+    renderWithMantine(<TargetSelectionPage onContinue={onContinue} />);
+    const user = userEvent.setup();
+    await chooseTarget(user, 'Sales orders');
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled(); // schema still loading
+    pending.resolve([200, ORDERS_DETAIL]);
+    const button = await screen.findByRole('button', { name: 'Continue' });
+    await waitFor(() => expect(button).toBeEnabled());
+
+    await user.click(button);
+    expect(onContinue).toHaveBeenCalledWith(TARGETS.targets[0]);
+  });
+
+  it('keeps Continue disabled when the schema fails to load', async () => {
+    mockFetch({
+      'GET /api/targets': () => [200, TARGETS],
+      'GET /api/targets/orders': () => [500, { detail: { code: 'internal_error', message: 'Could not read the schema.', field: null } }],
+    });
+    renderWithMantine(<TargetSelectionPage onContinue={vi.fn()} />);
+    await chooseTarget(userEvent.setup(), 'Sales orders');
+
+    await screen.findByText('Could not read the schema.');
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
   });
 });

@@ -5,9 +5,8 @@ import {
 import { IconAlertTriangle, IconArrowRight, IconDatabase, IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
 import TargetSchema from '../components/TargetSchema';
 import { useTargetDetail, useTargets } from '../hooks/useTargets';
+import { databaseLabel } from '../utils';
 
-const DATABASE_LABEL = { sqlite: 'SQLite' };
-const databaseLabel = (type) => DATABASE_LABEL[type] ?? type;
 
 function Fact({ label, children }) {
   return (
@@ -56,12 +55,14 @@ function SchemaSection({ target, detail, onReloadTargets }) {
   return detail.data ? <TargetSchema detail={detail.data} /> : null;
 }
 
-export default function TargetSelectionPage({ onOpenDemo }) {
+export default function TargetSelectionPage({ initialTargetId = null, onContinue, onOpenDemo }) {
   const targets = useTargets();
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(initialTargetId);
   const detail = useTargetDetail(selectedId);
 
   const selected = targets.data?.find((t) => t.target_id === selectedId) ?? null;
+  // Continue only once the schema for the current selection has loaded without error.
+  const canContinue = Boolean(selected && detail.data?.target_id === selected.target_id && !detail.loading && !detail.error);
   const reloadTargets = () => {
     setSelectedId(null);
     targets.reload();
@@ -133,11 +134,12 @@ export default function TargetSelectionPage({ onOpenDemo }) {
           <Anchor component="button" size="sm" onClick={onOpenDemo}>
             <Group gap={4}><IconPlayerPlay size={14} /> Try the demo instead</Group>
           </Anchor>
-          {/* The CSV upload arrives in the next milestone. A disabled button fires no mouse events, so the
-              tooltip needs a wrapper. */}
-          <Tooltip label={selected ? 'CSV upload arrives in the next milestone' : 'Select a target first'}>
+          <Tooltip label="Select a target and wait for its schema to load" disabled={canContinue}>
+            {/* A disabled button fires no mouse events, so the tooltip needs a wrapper. */}
             <span>
-              <Button rightSection={<IconArrowRight size={16} />} disabled>Continue</Button>
+              <Button rightSection={<IconArrowRight size={16} />} disabled={!canContinue} onClick={() => onContinue(selected)}>
+                Continue
+              </Button>
             </span>
           </Tooltip>
         </Group>

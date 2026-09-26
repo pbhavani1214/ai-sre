@@ -84,6 +84,22 @@ export async function getTarget(targetId) {
 }
 
 /**
+ * POST /api/runs: creates a run from ONE uploaded CSV for the selected target (multipart/form-data).
+ * Sends exactly `target_id` and `file`. The backend owns validation.
+ * @param {string} targetId
+ * @param {File} file
+ * @returns {Promise<import('../types').RunSummary>}
+ */
+export async function createRun(targetId, file) {
+  requireBackend();
+  const form = new FormData();
+  form.append('target_id', targetId);
+  form.append('file', file);
+  // No content-type header: the browser sets multipart/form-data with its boundary.
+  return request('/api/runs', { method: 'POST', body: form });
+}
+
+/**
  * The demo run: the deterministic validation state plus the raw run record and datasets.
  * @returns {Promise<import('../types').Scenario>}
  */

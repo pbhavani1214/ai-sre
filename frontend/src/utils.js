@@ -31,3 +31,13 @@ export const isFailed = (check) => check.status !== 'PASSED';
 
 /** validation_results as a name -> CheckResult map */
 export const byName = (checks) => Object.fromEntries(checks.map((c) => [c.name, c]));
+
+export function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+const DATABASE_LABEL = { sqlite: 'SQLite' };
+/** "sqlite" -> "SQLite"; unknown types are shown as returned. */
+export const databaseLabel = (type) => DATABASE_LABEL[type] ?? type;
