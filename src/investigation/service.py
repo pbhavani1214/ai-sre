@@ -18,6 +18,7 @@ from src.ai.provider import LLMProvider, get_provider
 from src.data.scenario import PIPELINE_DESCRIPTION, PIPELINE_NAME, load_scenario
 from src.investigation.models import (
     HYPOTHESIS_STATUSES,
+    REQUIRED_KEYS,
     InvestigationParseError,
     InvestigationResult,
     TraceStep,
@@ -178,6 +179,10 @@ def evidence_catalog(context: dict[str, Any]) -> list[dict[str, str]]:
         cat.append({"id": "dataset.target_table", "location": "target_table"})
     if "upload" in context:
         cat.append({"id": "dataset.upload", "location": "upload"})
+    for key, eid in (("column_profiles", "dataset.column_profiles"), ("failing_rows", "dataset.failing_rows"),
+                     ("target_data", "dataset.target_data"), ("run_history", "pipeline.run_history")):
+        if key in context:
+            cat.append({"id": eid, "location": key})
     return cat
 
 
@@ -215,6 +220,8 @@ def evidence_warnings(result: InvestigationResult, known_ids: set[str]) -> list[
     warnings = []
     groups = [("observed_facts", result.observed_facts), ("root_cause_evidence", result.root_cause_evidence)]
     groups += [(f"hypotheses[{i}].evidence", h.evidence) for i, h in enumerate(result.hypotheses)]
+    groups += [(f"cause_groups[{i}].evidence", g.evidence) for i, g in enumerate(result.cause_groups)]
+    groups += [(f"row_fixes[{i}].evidence", [f.evidence]) for i, f in enumerate(result.row_fixes) if f.evidence]
     for field_name, items in groups:
         for j, text in enumerate(items):
             refs = _EVIDENCE_REF.findall(text)
@@ -231,6 +238,14 @@ def evidence_warnings(result: InvestigationResult, known_ids: set[str]) -> list[
         if not any(h.status == "SUPPORTED" for h in result.hypotheses):
             warnings.append("root cause marked IDENTIFIED but no hypothesis is SUPPORTED")
     return warnings
+
+
+def _data_note(context: dict[str, Any]) -> str:
+    rows = context.get("failing_rows")
+    if rows is None:
+        return "Datasets sent as summaries (row counts, columns, null counts), not raw rows."
+    return (f"The uploaded file was sent as column profiles; only the {rows['rows_sent']} row(s) named by failed "
+            f"checks were sent in full (of {rows['rows_in_file']} rows).")
 
 
 def build_trace(context: dict[str, Any], result: InvestigationResult, provider: LLMProvider,
@@ -255,8 +270,7 @@ def build_trace(context: dict[str, Any], result: InvestigationResult, provider: 
 
     return [
         TraceStep("evidence_collection",
-                  f"Assembled {len(ids)} evidence items: {', '.join(ids)}. "
-                  "Datasets sent as summaries (row counts, columns, null counts), not raw rows."),
+                  f"Assembled {len(ids)} evidence items: {', '.join(ids)}. " + _data_note(context)),
         TraceStep("validation_analysis", validation + "."),
         TraceStep("hypothesis_generation", generation + "."),
         TraceStep("evidence_correlation",
@@ -323,31 +337,35 @@ def investigate_pipeline(
     return _ask_llm(context, provider)
 
 
-def investigate_evidence(context: dict[str, Any], provider: LLMProvider | None = None) -> InvestigationResult:
+def investigate_evidence(context: dict[str, Any], provider: LLMProvider | None = None,
+                         system_prompt: str = SYSTEM_PROMPT,
+                         required: tuple[str, ...] = REQUIRED_KEYS) -> InvestigationResult:
     """Investigate a ready-made evidence package (upload runs, see src/runs/service.py)."""
-    return _ask_llm(context, provider)
+    return _ask_llm(context, provider, system_prompt, required)
 
 
-def _ask_llm(context: dict[str, Any], provider: LLMProvider | None) -> InvestigationResult:
+def _ask_llm(context: dict[str, Any], provider: LLMProvider | None, system_prompt: str = SYSTEM_PROMPT,
+             required: tuple[str, ...] = REQUIRED_KEYS) -> InvestigationResult:
     provider = provider or get_provider()
     context = {**context, "validation_summary": summarize_validations(context.get("validation_results", []))}
     context["available_evidence"] = evidence_catalog(context)
     user_prompt = build_user_prompt(context)
 
-    system, rejected = SYSTEM_PROMPT, []
+    system, rejected = system_prompt, []
     for attempt in range(1, MAX_ATTEMPTS + 1):
         raw = provider.complete(system, user_prompt)
         try:
-            result = InvestigationResult.from_dict(parse_llm_json(raw), raw_response=raw)
+            result = InvestigationResult.from_dict(parse_llm_json(raw), raw_response=raw, required=required)
             break
         except InvestigationParseError as e:
             rejected.append(str(e))
             if attempt == MAX_ATTEMPTS:
                 raise InvestigationParseError(f"{e} (after {attempt} attempts)") from e
-            system = SYSTEM_PROMPT + RETRY_NOTE.format(error=e)
+            system = system_prompt + RETRY_NOTE.format(error=e)
 
     result.evidence_warnings = evidence_warnings(result, {e["id"] for e in context["available_evidence"]})
     result.investigation_trace = build_trace(context, result, provider, attempt, rejected)
+    result.model = str(getattr(provider, "model", "") or "")
     return result
 
 

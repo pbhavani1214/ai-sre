@@ -113,7 +113,7 @@ describe('run-scoped investigation', () => {
       expect(within(panel).getAllByText(text).length).toBeGreaterThan(0);
     }
     expect(within(panel).getByText('Identified')).toBeInTheDocument();
-    await user.click(within(panel).getByRole('tab', { name: /Observed facts/ }));
+    await user.click(within(panel).getByRole('tab', { name: /Evidence reviewed/ }));
     expect(within(panel).getAllByText('amount=999999 exceeds configured limit').length).toBeGreaterThan(0);
     await user.click(within(panel).getByRole('tab', { name: /Trace/ }));
     expect(within(panel).getByText('Reviewed 1 failed check.')).toBeInTheDocument();
@@ -190,5 +190,72 @@ describe('corrected upload (retry)', () => {
     expect(link).toHaveTextContent('run_aaaaaaaaaaaa');
     await user.click(within(link).getByRole('button', { name: 'View original run' }));
     expect(onOpenRun).toHaveBeenCalledWith('run_aaaaaaaaaaaa');
+  });
+});
+
+describe('investigation fixes (v2.2)', () => {
+  const GUIDED = {
+    ...INVESTIGATION,
+    model: 'gpt-4o',
+    cause_groups: [{ title: 'Export writes cents', category: 'SOURCE_FORMAT', explanation: 'Amounts are 100x too large.',
+      checks: ['amount_limit'], rows: [3], evidence: ['[dataset.column_profiles] amounts'] }],
+    row_fixes: [
+      { row: 3, column: 'amount', action: 'REPLACE', current_value: '999999', suggested_value: '9999.99',
+        reason: 'Divide by 100.', confidence: 'HIGH', evidence: '[validation.amount_limit.001]', satisfies_constraints: true },
+      { row: 5, column: 'memo', action: 'NEEDS_DECISION', current_value: '', suggested_value: null,
+        reason: 'The memo is unknown.', confidence: 'LOW', evidence: '', satisfies_constraints: false },
+    ],
+    prevention: ['Export amounts in units, not cents.'],
+    regression_test: '"""Data check for table `ledger_entries` in ledger.db, generated from its schema."""\ndef test_x(): pass',
+  };
+
+  it('leads with the root cause, its causes, the row fixes and prevention', () => {
+    renderRun(FAILED_RUN, { investigation: GUIDED });
+    const panel = screen.getByTestId('investigation');
+    expect(within(panel).getByTestId('investigation-model')).toHaveTextContent('gpt-4o');
+    expect(within(screen.getByTestId('cause-groups')).getByText('Export writes cents')).toBeInTheDocument();
+    const fixes = within(screen.getByTestId('row-fixes')).getByRole('table', { name: 'Suggested fixes' });
+    expect(within(fixes).getByText('9999.99')).toBeInTheDocument();
+    expect(within(fixes).getByText('Decide')).toBeInTheDocument();
+    expect(screen.getByText(/1 value needs your decision/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('fix-this-file')).getByText(GUIDED.recommended_fix)).toBeInTheDocument();
+    expect(within(screen.getByTestId('prevention')).getByText('Export amounts in units, not cents.')).toBeInTheDocument();
+  });
+
+  it('retries with the suggested CSV from the backend', async () => {
+    const fetchMock = mockFetch({
+      'GET /api/runs/run_aaaaaaaaaaaa/suggested-csv': () => new Response('amount\n9999.99\n', { status: 200, headers: { 'content-type': 'text/csv' } }),
+      'POST /api/runs/run_aaaaaaaaaaaa/retry': () => [201, { ...FAILED_RUN, run_id: 'run_bbbbbbbbbbbb', parent_run_id: 'run_aaaaaaaaaaaa' }],
+    });
+    const { user, onRetried } = renderRun(FAILED_RUN, { investigation: GUIDED });
+    await user.click(screen.getByRole('button', { name: 'Retry with suggested CSV' }));
+    await waitFor(() => expect(onRetried).toHaveBeenCalledWith(expect.objectContaining({ run_id: 'run_bbbbbbbbbbbb' })));
+    const [, init] = fetchMock.mock.calls.find(([url]) => url.endsWith('/retry'));
+    const file = init.body.get('file');
+    expect(file.name).toBe('ledger_suggested.csv');
+    expect(await file.text()).toBe('amount\n9999.99\n');
+  });
+
+  it('shows the backend error when no suggested file can be built', async () => {
+    mockFetch({
+      'GET /api/runs/run_aaaaaaaaaaaa/suggested-csv': () => [409, { detail: { code: 'no_suggested_fixes', message: 'The investigation has no fixes that can be applied automatically.', field: 'run_id' } }],
+    });
+    const { user } = renderRun(FAILED_RUN, { investigation: GUIDED });
+    await user.click(screen.getByRole('button', { name: 'Download suggested CSV' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('no fixes that can be applied automatically');
+  });
+
+  it('labels a schema-generated regression test and offers it as a file', async () => {
+    const { user } = renderRun(FAILED_RUN, { investigation: GUIDED });
+    await user.click(screen.getByRole('tab', { name: /Regression test/ }));
+    expect(screen.getByText(/not by the AI/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download test file' })).toBeInTheDocument();
+  });
+
+  it('keeps the earlier layout for an investigation without the new fields', () => {
+    renderRun(FAILED_RUN, { investigation: INVESTIGATION });
+    expect(screen.queryByTestId('row-fixes')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('investigation-model')).not.toBeInTheDocument();
+    expect(screen.getByText('Recommended fix')).toBeInTheDocument();
   });
 });

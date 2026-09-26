@@ -7,7 +7,7 @@ import sqlite3
 from contextlib import closing
 from typing import Callable
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.ai.provider import LLMError, LLMProvider, LLMTimeoutError, get_provider
@@ -20,7 +20,7 @@ from src.config import cors_origins, target_db_dir, target_db_path
 from src.investigation.models import InvestigationParseError
 from src.investigation.service import investigate_pipeline
 from src.runs.ingest import UploadError, check_file_type, parse_csv, read_limited
-from src.runs.service import INVESTIGABLE, RETRYABLE, execute_run, investigate_run
+from src.runs.service import INVESTIGABLE, RETRYABLE, execute_run, investigate_run, suggested_csv
 from src.runs.store import RunRecord, RunStore, new_run_id, store
 from src.target.database import initialize_database
 from src.target.discovery import discover_schema
@@ -179,7 +179,8 @@ def _start_run(database: Database, table: str, file: UploadFile, runs: RunStore,
     except UploadError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail()) from e
     record = RunRecord(run_id=new_run_id(), target_id=table, target_table=table, file_name=file.filename,
-                       upload=upload, parent_run_id=parent_run_id, database_id=database.database_id)
+                       upload=upload, parent_run_id=parent_run_id, database_id=database.database_id,
+                       database_name=database.file_name)
     runs.add(record)
     execute_run(record, str(database.path))
     return record.to_summary()
@@ -247,7 +248,7 @@ def investigate_live_run(
     except LLMError as e:
         raise api_error(503, "llm_not_configured", "AI investigation is not configured.") from e
     try:
-        result = investigate_run(record, provider)
+        result = investigate_run(record, provider, runs.all())
     except InvestigationParseError as e:
         log.warning("Unparseable LLM output for %s: %s", run_id, e)
         raise api_error(502, "invalid_ai_response", "AI investigation returned an invalid response.") from e
@@ -260,6 +261,26 @@ def investigate_live_run(
     except Exception as e:  # never leak a stack trace to the frontend
         log.exception("Run investigation failed unexpectedly")
         raise api_error(500, "internal_error", "Investigation failed due to an internal error.") from e
-    response = RunInvestigateResponse(run_id=record.run_id, **InvestigateResponse.from_result(result).model_dump())
+    response = RunInvestigateResponse.from_run_result(record.run_id, result)
     record.investigation = response.model_dump()
     return response
+
+
+@app.get("/api/runs/{run_id}/suggested-csv", response_class=Response,
+         responses={200: {"content": {"text/csv": {}}}})
+def get_suggested_csv(run_id: str, runs: RunStore = Depends(get_run_store)) -> Response:
+    """The uploaded file with the latest investigation's REPLACE and DELETE_ROW fixes applied. NEEDS_DECISION
+    values are left as uploaded. Nothing is validated or loaded: retry with the file to do that."""
+    record = runs.get(run_id)
+    if record is None:
+        raise _run_not_found(run_id)
+    if not record.investigation:
+        raise api_error(409, "no_investigation", f"Run '{run_id}' has not been investigated yet.", "run_id")
+    text, applied = suggested_csv(record)
+    if not applied:
+        raise api_error(409, "no_suggested_fixes",
+                        "The investigation has no fixes that can be applied automatically.", "run_id")
+    stem = record.file_name.rsplit(".", 1)[0] or "upload"
+    return Response(content=text, media_type="text/csv; charset=utf-8",
+                    headers={"content-disposition": f'attachment; filename="{stem}_suggested.csv"',
+                             "x-fixes-applied": str(applied)})

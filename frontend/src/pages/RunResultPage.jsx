@@ -192,7 +192,8 @@ export default function RunResultPage({
         )}
 
         {FAILED_STATES.has(run.status) && onInvestigation && (
-          <RunInvestigationPanel runId={run.run_id} result={investigation} onResult={onInvestigation} />
+          <RunInvestigationPanel runId={run.run_id} fileName={run.file_name} result={investigation}
+            onResult={onInvestigation} onRetried={onRetried} />
         )}
         {FAILED_STATES.has(run.status) && onRetried && <RetryPanel runId={run.run_id} onRetried={onRetried} />}
 

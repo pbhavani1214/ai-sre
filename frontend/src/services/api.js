@@ -133,6 +133,23 @@ export async function retryRun(runId, file) {
   return request(`/api/runs/${encodeURIComponent(runId)}/retry`, { method: 'POST', body: form });
 }
 
+/**
+ * GET /api/runs/{run_id}/suggested-csv: the uploaded file with the investigation's REPLACE and DELETE_ROW fixes applied
+ * (CONTRACT.md §16, v2.2). Returns the CSV text. Nothing is validated until the file is retried.
+ * @returns {Promise<string>}
+ */
+export async function getSuggestedCsv(runId) {
+  requireBackend();
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}/api/runs/${encodeURIComponent(runId)}/suggested-csv`);
+  } catch {
+    throw new ApiError(`Could not reach the backend at ${BASE_URL}. Is it running?`, { code: 'network_error' });
+  }
+  if (!res.ok) throw parseError(res.status, await res.text().catch(() => ''));
+  return res.text();
+}
+
 /** @returns {Promise<import('../types').Health | null>} null when no backend is configured */
 export async function getHealth() {
   if (USE_MOCK) return null;

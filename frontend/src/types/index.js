@@ -94,7 +94,27 @@
  * @property {Object<string, any> | null} load_result   CONTRACT.md §14/§22: {rows_loaded, target_table}; rendered
  *                                                     generically so any fields the backend adds are shown
  *
- * @typedef {InvestigationResult & {run_id: string}} RunInvestigation  POST /api/runs/{run_id}/investigate (§16)
+ * @typedef {Object} CauseGroup  failures grouped by likely origin (v2.2)
+ * @property {string} title
+ * @property {'SOURCE_FORMAT'|'DATA_ENTRY'|'DUPLICATE_RECORD'|'NEW_VALUE'|'EXISTING_DATA'|'OTHER'|string} category
+ * @property {string} explanation
+ * @property {string[]} checks
+ * @property {number[]} rows
+ * @property {string[]} evidence
+ *
+ * @typedef {Object} RowFix  one suggested change to the uploaded file, checked by the backend (v2.2)
+ * @property {number} row                file line number (row 1 is the header)
+ * @property {string|null} column
+ * @property {'REPLACE'|'DELETE_ROW'|'NEEDS_DECISION'} action
+ * @property {string|null} current_value  read from the file by the backend
+ * @property {string|null} suggested_value
+ * @property {string} reason
+ * @property {'HIGH'|'MEDIUM'|'LOW'} confidence
+ * @property {string} evidence
+ * @property {boolean} satisfies_constraints  the suggestion passes the column's type, NOT NULL and CHECK rules
+ *
+ * @typedef {InvestigationResult & {run_id: string, cause_groups: CauseGroup[], row_fixes: RowFix[],
+ *   prevention: string[], model: string|null}} RunInvestigation  POST /api/runs/{run_id}/investigate (§16)
  *
  * @typedef {Object} Health  GET /health
  * @property {'ok'} status

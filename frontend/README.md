@@ -24,9 +24,11 @@ The header badge shows the connection: **Backend connected**, **AI not configure
    the table's columns and constraints come from the API.
 2. **Upload**: one CSV (up to 10 MB). The browser only checks the `.csv` name and size; the backend validates.
 3. **Run result**:
-   - `FAILED_VALIDATION`: summary counts and every check with its evidence, then **Investigate with AI** (summary,
-     root cause with reasoning and evidence, recommended fix, hypotheses, observed facts, trace, regression test)
-     and **Fix the data and retry** (upload a corrected CSV as a new run linked to this one).
+   - `FAILED_VALIDATION`: summary counts and every check with its evidence, then **Investigate with AI**: the root
+     cause with the failures grouped by likely cause, **Fix this file** (row-by-row suggested changes checked against
+     the file, with **Download suggested CSV** and **Retry with suggested CSV**), **Prevent it next time**, then
+     hypotheses, a regression test generated from the table's schema, the trace and the evidence reviewed. Then
+     **Fix the data and retry** (upload a corrected CSV as a new run linked to this one).
    - `SUCCEEDED`: the load result as returned by the backend. `LOAD_FAILED`: validation passed but the load was
      rolled back; investigate and retry are available.
    - A retry shows its parent run, and **View original run** returns to it unchanged.
@@ -40,7 +42,7 @@ src/
 ├── main.jsx, App.jsx, theme.js, styles.css, utils.js
 ├── pages/          TargetSelectionPage, UploadPage, RunResultPage
 ├── components/     TargetSchema, CsvDrop, RunValidationResults, RunInvestigationPanel, InvestigationResult,
-│                   HypothesisList, CitedList, CodeBlock, RetryPanel, AppHeader
+│                   SuggestedFixes, HypothesisList, CitedList, CodeBlock, RetryPanel, AppHeader
 ├── hooks/          useTargets, useHealth
 ├── services/       api.js (the only module that calls the backend), errors.js (error codes -> messages)
 ├── types/index.js  JSDoc shapes of the API payloads
@@ -60,6 +62,7 @@ src/
 | `POST` | `/api/runs` | Upload one CSV (`target_id`, `file`, `database_id`) and get the validated run |
 | `GET` | `/api/runs/{run_id}` | Open a retry's parent run |
 | `POST` | `/api/runs/{run_id}/investigate` | AI investigation of a failed run |
+| `GET` | `/api/runs/{run_id}/suggested-csv` | The upload with the investigation's fixes applied (download or retry) |
 | `POST` | `/api/runs/{run_id}/retry` | Corrected CSV (`file`) as a new run with `parent_run_id` |
 
 Errors use `{detail: {code, message, field}}`; `api.js` turns them into an `ApiError`, and `errors.js` maps codes to

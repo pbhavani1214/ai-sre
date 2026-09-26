@@ -41,6 +41,8 @@ class RunRecord:
     schema: dict[str, Any] | None = None  # the target schema the run was validated against
     load_error: str | None = None  # the database error when the load failed
     database_id: str = ""  # the database the target table belongs to (a retry inherits it)
+    database_name: str = ""  # its file name, for generated artifacts
+    target_snapshot: dict[str, Any] | None = None  # what the target held when the run was validated (AI evidence)
 
     def __post_init__(self):
         self.status_history.append(self.status)
@@ -92,6 +94,10 @@ class RunStore:
     def get(self, run_id: str) -> RunRecord | None:
         with self._lock:
             return self._runs.get(run_id)
+
+    def all(self) -> list[RunRecord]:
+        with self._lock:
+            return list(self._runs.values())
 
     def __len__(self) -> int:
         with self._lock:

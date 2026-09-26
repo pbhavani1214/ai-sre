@@ -43,9 +43,9 @@ missing, but 5 duplicate rows hide the gap.
 | `src/investigation/service.py` | Builds the evidence, sends it to the LLM, parses structured JSON output |
 | `tests/test_validation.py` | Proves the validation tools work, plus the investigation wiring (stub LLM) |
 | `src/target/` | SQLite databases: demo databases (`database.py`: `crm.db` with `customer`, `sales.db` with `orders` and `products`; `python -m src.target.database [--reset]`), the database catalog (`catalog.py`: every SQLite file in `TARGET_DB_DIR`, and the tables in each) and schema discovery from SQLite (`discovery.py`) |
-| `src/runs/` | Upload runs: CSV envelope checks (`ingest.py`), in-memory run store with the latest 20 runs (`store.py`), target-aware validation derived from the discovered schema (`validation.py`), and the run lifecycle: validation, transactional APPEND load, run-scoped AI investigation evidence (`service.py`) |
+| `src/runs/` | Upload runs: CSV envelope checks (`ingest.py`), in-memory run store with the latest 20 runs (`store.py`), target-aware validation derived from the discovered schema (`validation.py`), the run lifecycle: validation, transactional APPEND load, run-scoped AI investigation evidence and prompt (`service.py`), evidence validation doesn't show plus checking and applying the AI's row fixes (`insights.py`), and the regression test generated from the target schema (`regression.py`) |
 | `data/demo_uploads/` | `customer_bad.csv` (fails 5 checks) and `customer_fixed.csv` (loads 7 rows) for CRM → `customer`; `orders_bad.csv` (fails 4 checks) and `orders_fixed.csv` (loads 6 rows) for Sales → `orders`. Reset the demo databases with `python -m src.target.database --reset` |
-| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate`, `/api/targets`, `/api/targets/{target_id}`, `POST /api/runs`, `GET /api/runs/{run_id}`, `POST /api/runs/{run_id}/investigate`, `POST /api/runs/{run_id}/retry` |
+| `src/api/` | FastAPI app: `/health`, `/api/demo/scenario`, `/api/demo/run`, `/api/investigate`, `/api/targets`, `/api/targets/{target_id}`, `POST /api/runs`, `GET /api/runs/{run_id}`, `POST /api/runs/{run_id}/investigate`, `GET /api/runs/{run_id}/suggested-csv`, `POST /api/runs/{run_id}/retry` |
 | `frontend/` | React + Vite + Mantine UI (see `frontend/README.md`) |
 | `example_usage.py` | How another module calls the investigation service |
 
@@ -58,7 +58,7 @@ python -m pytest -q
 # LLM configuration (env vars)
 LLM_PROVIDER=anthropic   # or openai
 LLM_API_KEY=...
-LLM_MODEL=...            # optional
+LLM_MODEL=...            # optional; defaults claude-sonnet-5 / gpt-4o. Prefer a full-size model over e.g. gpt-4o-mini
 python example_usage.py
 ```
 
