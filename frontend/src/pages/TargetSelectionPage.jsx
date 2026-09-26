@@ -118,7 +118,6 @@ export default function TargetSelectionPage({ initialDatabaseId = null, initialT
                 onChange={chooseDatabase}
                 allowDeselect={false}
                 checkIconPosition="right"
-                comboboxProps={{ withinPortal: false }}
               />
             )}
 
@@ -142,7 +141,6 @@ export default function TargetSelectionPage({ initialDatabaseId = null, initialT
                 onChange={setSelectedId}
                 allowDeselect={false}
                 checkIconPosition="right"
-                comboboxProps={{ withinPortal: false }}
               />
             )}
 
