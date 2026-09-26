@@ -8,6 +8,7 @@ import pytest
 from src.data.scenario import load_scenario
 from src.investigation.models import InvestigationParseError
 from src.investigation.service import investigate_scenario, parse_llm_json
+from tests.llm_stub import valid_llm_output
 from src.validation.tools import (
     duplicate_customer_id_check,
     invalid_email_check,
@@ -87,11 +88,7 @@ class RecordingProvider:
 
     def complete(self, system, user):
         self.user_prompt = user
-        return "```json\n" + json.dumps({
-            "summary": "stub", "hypotheses": [{"statement": "h", "status": "inconclusive", "confidence": 2}],
-            "evidence": ["e"], "root_cause": "stub", "recommended_fix": "stub",
-            "regression_test": {"name": "t", "description": "d", "code": "def test_x(): pass"},
-        }) + "\n```"
+        return "```json\n" + json.dumps(valid_llm_output()) + "\n```"  # fenced, as models often reply
 
 
 def test_investigation_sends_all_evidence_and_parses_result():
@@ -99,13 +96,13 @@ def test_investigation_sends_all_evidence_and_parses_result():
     result = investigate_scenario(provider=provider)
 
     ctx = json.loads(provider.user_prompt.split("\n\n", 1)[1])
-    assert set(ctx) == {"pipeline_name", "pipeline_description", "source", "target",
-                        "validation_results", "execution_evidence"}
+    assert set(ctx) == {"pipeline_name", "pipeline_description", "source", "target", "validation_results",
+                        "execution_evidence", "validation_summary", "available_evidence"}
     assert len(ctx["validation_results"]) == 6
     assert "logs" in ctx["execution_evidence"]["pipeline_run"]
 
-    assert result.hypotheses[0].confidence == 1.0  # clamped
-    assert result.evidence[0].source == "unspecified"
+    assert result.hypotheses[0].status == "SUPPORTED"
+    assert result.observed_facts == valid_llm_output()["observed_facts"]
     assert result.regression_test.code.startswith("def test_x")
 
 

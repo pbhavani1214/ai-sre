@@ -12,13 +12,18 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
 
 
 class LLMError(RuntimeError):
-    pass
+    """Provider unavailable, misconfigured, or returned an unusable response."""
+
+
+class LLMTimeoutError(LLMError):
+    """Provider did not respond within LLM_TIMEOUT."""
 
 
 class LLMProvider(ABC):
@@ -35,14 +40,20 @@ def _post_json(url: str, headers: dict[str, str], payload: dict, timeout: float)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        raise LLMError(f"HTTP {e.code} from {url}: {e.read().decode('utf-8', 'replace')[:500]}") from e
+        raise LLMError(f"HTTP {e.code} from {url}: {e.read().decode('utf-8', 'replace')[:300]}") from e
     except urllib.error.URLError as e:
+        if isinstance(e.reason, (TimeoutError, socket.timeout)):
+            raise LLMTimeoutError(f"No response from {url} within {timeout:g}s") from e
         raise LLMError(f"Could not reach {url}: {e.reason}") from e
+    except (TimeoutError, socket.timeout) as e:
+        raise LLMTimeoutError(f"No response from {url} within {timeout:g}s") from e
+    except json.JSONDecodeError as e:
+        raise LLMError(f"Non-JSON response from {url}") from e
 
 
 class AnthropicProvider(LLMProvider):
     def __init__(self, api_key: str, model: str = "claude-sonnet-5", base_url: str = "https://api.anthropic.com",
-                 timeout: float = 120, max_tokens: int = 4096):
+                 timeout: float = 120, max_tokens: int = 8192):
         self.api_key, self.model, self.base_url = api_key, model, base_url.rstrip("/")
         self.timeout, self.max_tokens = timeout, max_tokens
 
@@ -54,6 +65,8 @@ class AnthropicProvider(LLMProvider):
              "messages": [{"role": "user", "content": user}]},
             self.timeout,
         )
+        if data.get("stop_reason") == "max_tokens":
+            raise LLMError(f"Response truncated at max_tokens={self.max_tokens}")
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
 
@@ -70,7 +83,13 @@ class OpenAIProvider(LLMProvider):
              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
             self.timeout,
         )
-        return data["choices"][0]["message"]["content"]
+        try:
+            choice = data["choices"][0]
+        except (KeyError, IndexError, TypeError) as e:
+            raise LLMError("Provider response has no choices") from e
+        if choice.get("finish_reason") == "length":
+            raise LLMError("Response truncated (finish_reason=length)")
+        return choice.get("message", {}).get("content") or ""
 
 
 def get_provider() -> LLMProvider:
