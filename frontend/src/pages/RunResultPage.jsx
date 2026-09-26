@@ -1,8 +1,11 @@
 import { Alert, Badge, Button, Card, Code, Container, Group, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import {
-  IconAlertTriangle, IconArrowLeft, IconCircleCheck, IconCircleX, IconClock, IconFileUpload, IconInfoCircle, IconLoader2,
+  IconAlertTriangle, IconArrowBackUp, IconArrowLeft, IconCircleCheck, IconCircleX, IconClock, IconDatabase, IconFileUpload,
+  IconInfoCircle, IconLoader2,
 } from '@tabler/icons-react';
 import RunValidationResults from '../components/RunValidationResults';
+import RunInvestigationPanel from '../components/RunInvestigationPanel';
+import RetryPanel from '../components/RetryPanel';
 import { formatDateTime } from '../utils';
 
 /**
@@ -28,12 +31,12 @@ const STATUS_VIEW = {
     subtitle: 'The required checks passed. Loading into the target table has not completed.',
   },
   SUCCEEDED: {
-    color: 'green', icon: IconCircleCheck, title: 'Run succeeded',
-    subtitle: 'The backend reports the run as succeeded.',
+    color: 'green', icon: IconCircleCheck, title: 'Loaded successfully',
+    subtitle: 'Validation passed and the rows were inserted into the target table; the transaction committed.',
   },
   LOAD_FAILED: {
     color: 'red', icon: IconAlertTriangle, title: 'Load failed',
-    subtitle: 'The database load failed and was rolled back.',
+    subtitle: 'Validation passed, but the database load failed and was rolled back. Nothing was written to the table.',
   },
 };
 const statusLabel = (status) => String(status).replace(/_/g, ' ');
@@ -81,8 +84,56 @@ function ValidationSummary({ run }) {
   );
 }
 
+const fieldLabel = (key) => {
+  const t = String(key).replace(/_/g, ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+const fieldValue = (v) => (typeof v === 'number' ? v.toLocaleString() : typeof v === 'object' ? JSON.stringify(v) : String(v));
+
+/** load_result exactly as returned (CONTRACT.md §14/§22), every field shown with a readable label. */
+function LoadResultCard({ run, color }) {
+  const entries = Object.entries(run.load_result ?? {}).filter(([, v]) => v !== null && v !== undefined);
+  return (
+    <Card data-testid="load-result">
+      <Group gap="sm" mb="md">
+        <ThemeIcon size="lg" radius="md" variant="light" color={color}><IconDatabase size={20} /></ThemeIcon>
+        <Title order={2} fz="lg">Load result</Title>
+      </Group>
+      {entries.length === 0 ? (
+        <Text size="sm" c="dimmed">The backend returned no load details for this run.</Text>
+      ) : (
+        <SimpleGrid cols={{ base: 1, xs: 2, sm: Math.min(entries.length + (run.completed_at ? 1 : 0), 4) }} spacing="md">
+          {entries.map(([k, v]) => <Fact key={k} label={fieldLabel(k)}><span data-testid={`load-${k}`}>{fieldValue(v)}</span></Fact>)}
+          {run.completed_at && <Fact label="Completed">{formatDateTime(run.completed_at)}</Fact>}
+        </SimpleGrid>
+      )}
+    </Card>
+  );
+}
+
+/** A retry's link back to the run it corrects (parent_run_id). */
+function ParentLink({ run, onOpenRun }) {
+  if (!run.parent_run_id) return null;
+  return (
+    <Alert color="gray" variant="light" icon={<IconArrowBackUp />} title="Retry of an earlier run" data-testid="parent-link">
+      <Group justify="space-between" gap="xs">
+        <Text size="sm">
+          This run was created from a corrected file for run <Code>{run.parent_run_id}</Code>, which is unchanged.
+        </Text>
+        {onOpenRun && (
+          <Button size="xs" variant="default" onClick={() => onOpenRun(run.parent_run_id)}>View original run</Button>
+        )}
+      </Group>
+    </Alert>
+  );
+}
+
+const FAILED_STATES = new Set(['FAILED_VALIDATION', 'LOAD_FAILED']);
+
 /** The run returned by POST /api/runs (or GET /api/runs/{run_id}), rendered from its status and results. */
-export default function RunResultPage({ run, target, onUploadAnother, onChooseTarget }) {
+export default function RunResultPage({
+  run, target, investigation, onInvestigation, onRetried, onOpenRun, onUploadAnother, onChooseTarget,
+}) {
   const view = viewFor(run.status);
   const rows = run.summary?.rows_received;
   const hasResults = (run.validation_results?.length ?? 0) > 0;
@@ -97,6 +148,8 @@ export default function RunResultPage({ run, target, onUploadAnother, onChooseTa
             <Text c="dimmed">{view.subtitle}</Text>
           </div>
         </Group>
+
+        <ParentLink run={run} onOpenRun={onOpenRun} />
 
         <Card>
           <Group justify="space-between" align="flex-start" mb="md" gap="sm">
@@ -117,6 +170,8 @@ export default function RunResultPage({ run, target, onUploadAnother, onChooseTa
           </SimpleGrid>
         </Card>
 
+        {(run.status === 'SUCCEEDED' || run.status === 'LOAD_FAILED') && <LoadResultCard run={run} color={view.color} />}
+
         {view.note && (
           <Alert color={view.color} variant="light" icon={<IconInfoCircle />} title={view.note.title}>{view.note.text}</Alert>
         )}
@@ -131,7 +186,12 @@ export default function RunResultPage({ run, target, onUploadAnother, onChooseTa
           </Card>
         )}
 
-        {/* Next steps. Later milestones add their actions here (e.g. investigate, fix and retry). */}
+        {FAILED_STATES.has(run.status) && onInvestigation && (
+          <RunInvestigationPanel runId={run.run_id} result={investigation} onResult={onInvestigation} />
+        )}
+        {FAILED_STATES.has(run.status) && onRetried && <RetryPanel runId={run.run_id} onRetried={onRetried} />}
+
+        {/* Navigation */}
         <Group justify="space-between" data-testid="run-actions">
           <Button variant="default" leftSection={<IconArrowLeft size={16} />} onClick={onChooseTarget}>
             Choose another target

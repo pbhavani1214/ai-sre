@@ -19,7 +19,7 @@ export default function HypothesisList({ hypotheses }) {
         return (
           <Accordion.Item key={i} value={String(i)}>
             <Accordion.Control>
-              <Group gap="xs" wrap="nowrap" align="flex-start">
+              <Group gap="xs" wrap="wrap" align="flex-start">
                 <Badge color={s.color} variant="light" leftSection={<s.icon size={12} />} style={{ flexShrink: 0 }}>
                   {s.label}
                 </Badge>

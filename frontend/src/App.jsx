@@ -1,18 +1,42 @@
 import { useState } from 'react';
-import { AppShell } from '@mantine/core';
+import { Alert, AppShell, Container } from '@mantine/core';
 import AppHeader from './components/AppHeader';
 import TargetSelectionPage from './pages/TargetSelectionPage';
 import UploadPage from './pages/UploadPage';
 import RunResultPage from './pages/RunResultPage';
 import InvestigationPage from './pages/InvestigationPage';
+import { getRun } from './services/api';
 
 /**
- * Live flow: target selection -> CSV upload -> run created. The bundled demo stays one link away.
- * `target` is the TargetSummary chosen on the first screen; `run` is the RunSummary from POST /api/runs.
+ * Live flow: target selection -> CSV upload -> run result (validation, AI investigation, corrected retry, load).
+ * `runs` and `investigations` are keyed by run_id so a retry (child run) and its original (parent) each keep their
+ * own state; showing one never changes the other. The bundled demo stays one link away.
  */
 export default function App() {
-  const [view, setView] = useState({ name: 'targets', target: null, run: null });
-  const go = (name, patch = {}) => setView((v) => ({ ...v, ...patch, name }));
+  const [view, setView] = useState({ name: 'targets', target: null, runId: null });
+  const [runs, setRuns] = useState({});
+  const [investigations, setInvestigations] = useState({});
+  const [openError, setOpenError] = useState(null);
+  const go = (name, patch = {}) => {
+    setOpenError(null);
+    setView((v) => ({ ...v, ...patch, name }));
+  };
+
+  const showRun = (run) => {
+    setRuns((r) => ({ ...r, [run.run_id]: run }));
+    go('run', { runId: run.run_id });
+    window.scrollTo?.({ top: 0 });
+  };
+  const openRun = async (runId) => {
+    if (runs[runId]) return go('run', { runId });
+    try {
+      showRun(await getRun(runId));
+    } catch (e) {
+      setOpenError(e.message);
+    }
+  };
+
+  const run = view.runId ? runs[view.runId] : null;
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -23,20 +47,32 @@ export default function App() {
         {view.name === 'targets' && (
           <TargetSelectionPage
             initialTargetId={view.target?.target_id ?? null}
-            onContinue={(target) => go('upload', { target, run: null })}
+            onContinue={(target) => go('upload', { target, runId: null })}
             onOpenDemo={() => go('demo')}
           />
         )}
         {view.name === 'upload' && (
-          <UploadPage target={view.target} onBack={() => go('targets')} onCreated={(run) => go('run', { run })} />
+          <UploadPage target={view.target} onBack={() => go('targets')} onCreated={showRun} />
         )}
-        {view.name === 'run' && (
-          <RunResultPage
-            run={view.run}
-            target={view.target}
-            onUploadAnother={() => go('upload', { run: null })}
-            onChooseTarget={() => go('targets', { run: null })}
-          />
+        {view.name === 'run' && run && (
+          <>
+            {openError && (
+              <Container size="md" pt="md">
+                <Alert color="red" variant="light" title="Could not open that run" role="alert">{openError}</Alert>
+              </Container>
+            )}
+            <RunResultPage
+              key={run.run_id}
+              run={run}
+              target={view.target}
+              investigation={investigations[run.run_id] ?? null}
+              onInvestigation={(result) => setInvestigations((m) => ({ ...m, [run.run_id]: result }))}
+              onRetried={showRun}
+              onOpenRun={openRun}
+              onUploadAnother={() => go('upload', { runId: null })}
+              onChooseTarget={() => go('targets', { runId: null })}
+            />
+          </>
         )}
         {view.name === 'demo' && <InvestigationPage />}
       </AppShell.Main>
