@@ -131,3 +131,101 @@ class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     llm_configured: bool
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+# --- upload runs: single file -> existing SQLite target table ---------------------------------
+
+RunStatus = Literal["SUCCESS", "FAILED"]
+
+
+class ApiErrorDetail(BaseModel):
+    """`detail` of every error from the /api/targets and /api/runs endpoints."""
+
+    code: str
+    message: str
+    field: str | None = None
+
+
+class TargetColumn(BaseModel):
+    name: str
+    type: str
+    affinity: Literal["INTEGER", "TEXT", "BLOB", "REAL", "NUMERIC"]
+    not_null: bool
+    default: str | None
+    primary_key: bool
+    unique: bool
+
+
+class CheckConstraintOut(BaseModel):
+    name: str
+    expression: str
+
+
+class TargetSummary(BaseModel):
+    name: str
+    row_count: int
+    column_count: int
+
+
+class TargetDetail(BaseModel):
+    name: str
+    ddl: str
+    row_count: int
+    columns: list[TargetColumn]
+    primary_key: list[str]
+    unique_keys: list[list[str]]
+    check_constraints: list[CheckConstraintOut]
+    sample_rows: list[dict[str, Any]]
+
+
+class RowIssue(BaseModel):
+    line: int | None = Field(description="Line in the uploaded file (the header is line 1); null for file-level issues.")
+    column: str | None
+    value: Any = None
+    check: str
+    message: str
+
+
+class RetryComparison(BaseModel):
+    previous_run_id: str
+    previous_status: RunStatus
+    resolved_checks: list[str]
+    still_failing_checks: list[str]
+    new_failing_checks: list[str]
+
+
+class RunDetail(BaseModel):
+    run_id: str
+    created_at: str
+    status: RunStatus
+    failed_stage: Literal["schema_check", "validate", "load"] | None
+    target_table: str
+    file_name: str
+    retry_of: str | None
+    row_count: int
+    columns: list[str]
+    rows_loaded: int
+    target_rows_before: int
+    target_rows_after: int
+    load_error: str | None
+    validation_summary: ValidationSummary
+    validation_results: list[CheckResultOut]
+    row_issues: list[RowIssue]
+    row_issues_truncated: bool
+    retry_comparison: RetryComparison | None
+    preview: list[dict[str, Any]]
+    pipeline_run: dict[str, Any]
+    investigation: InvestigateResponse | None
+
+
+class RunListItem(BaseModel):
+    run_id: str
+    created_at: str
+    status: RunStatus
+    failed_stage: str | None
+    target_table: str
+    file_name: str
+    retry_of: str | None
+    row_count: int
+    rows_loaded: int
+    investigated: bool

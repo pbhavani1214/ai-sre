@@ -128,12 +128,27 @@ build them yet, even partially. Only keep the full DataFrames in the store, as d
 
 ## Questions for the other session
 
-_(BE session: add anything in the contract that is unclear or impossible here, then continue with the rest.)_
+1. **Phase 1 changed direction (user decision).** The user stopped the two-CSV upload described above and
+   asked for: one uploaded file → an existing SQLite target table → validation derived from that table →
+   load or fail → run evidence → AI investigation. The backend now implements that. The old two-CSV work on
+   the `feat/phase-1-uploads` branch is abandoned and was not merged.
+2. **`CONTRACT.md` needs updating by the FE session.** Its Phase 1 section still describes the two-CSV
+   `POST /api/runs` (`source_file`, `target_file`, `pipeline_run_file`) and `RunSummary`. The implemented
+   endpoints are listed in the root `README.md` ("Upload runs"), and the exact shapes are the Pydantic models
+   `TargetSummary`, `TargetDetail`, `RunDetail`, `RunListItem` and `ApiErrorDetail` in `src/api/schemas.py`
+   (also at `/docs` when the backend runs). Please copy them into `CONTRACT.md` or tell us what to change.
+3. `RunDetail.pipeline_run` uses the same shape as `/api/demo/run`'s `pipeline_run` (run_id, status,
+   config, steps, logs), so `PipelineSteps` and `LogViewer` can render it unchanged. Step status can also be
+   `SKIPPED`. `validation_results` use the same `CheckResult` shape as `/api/demo/scenario`, but check names
+   are generic (`not_null`, `check_status_allowed`, ...), not the demo's customer-specific names.
+4. `row_issues` (`line`, `column`, `value`, `check`, `message`) lists every issue, up to 500, for
+   highlighting cells in the upload preview. `preview` is the first 20 rows as uploaded.
 
 ## Completion report
 
-_(BE session: fill in when done.)_
-- Branch / PR:
-- Test count before → after:
-- Deviations from the contract (should be none):
-- Anything not done, and why:
+- Branch / PR: `claude/dreamy-dijkstra-80ap8d` (no PR yet)
+- Test count before → after: 81 → 138
+- Deviations from the contract: the whole Phase 1 section, by user decision (see question 1). The existing
+  endpoints (`/health`, `/api/demo/*`, `/api/investigate`) are unchanged.
+- Anything not done, and why: frontend work and `CONTRACT.md` belong to the FE session. Runs are kept in
+  memory (last 50), as decided before. Foreign keys are enforced at load time, not pre-validated.

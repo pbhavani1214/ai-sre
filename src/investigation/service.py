@@ -168,6 +168,10 @@ def evidence_catalog(context: dict[str, Any]) -> list[dict[str, str]]:
     for side in ("source", "target"):
         if side in context:
             cat.append({"id": f"dataset.{side}", "location": side})
+    if "target_table" in context:  # upload runs: the target table's definition and the uploaded file
+        cat.append({"id": "dataset.target_table", "location": "target_table"})
+    if "upload" in context:
+        cat.append({"id": "dataset.upload", "location": "upload"})
     return cat
 
 
@@ -310,6 +314,11 @@ def investigate_pipeline(
         context["validation_results"] = [
             v for v in context["validation_results"] if v.get("name") not in suite_names
         ] + suite_results
+    return _ask_llm(context, provider)
+
+
+def investigate_evidence(context: dict[str, Any], provider: LLMProvider | None = None) -> InvestigationResult:
+    """Investigate a ready-made evidence package (used for upload runs, see src/runs/investigate.py)."""
     return _ask_llm(context, provider)
 
 
